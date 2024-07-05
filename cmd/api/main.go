@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 
+	"quoridor/internal/config"
 	"quoridor/internal/database"
 	"quoridor/internal/router"
 	"quoridor/internal/server"
@@ -11,7 +12,8 @@ import (
 func main() {
 	log.Println("Starting Quoridory server...")
 
-	_ = database.SetupDatabase()
+	cfg := config.ReadConfig()
+	_ = database.SetupDatabase(cfg)
 
 	router := router.NewRouter()
 	server.Serve(router)

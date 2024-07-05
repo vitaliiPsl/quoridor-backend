@@ -2,25 +2,19 @@ package database
 
 import (
 	"context"
-	"fmt"
 	"log"
-	"os"
 	"time"
 
-	_ "github.com/joho/godotenv/autoload"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+
+	"quoridor/internal/config"
 )
 
-var (
-	host = os.Getenv("DB_HOST")
-	port = os.Getenv("DB_PORT")
-)
-
-func SetupDatabase() *mongo.Database {
+func SetupDatabase(config *config.Config) *mongo.Database {
 	log.Println("Connecting to the database...")
 
-	clientOptions := options.Client().ApplyURI(fmt.Sprintf("mongodb://%s:%s", host, port))
+	clientOptions := options.Client().ApplyURI(config.DatabaseURI)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -36,7 +30,7 @@ func SetupDatabase() *mongo.Database {
 	}
 
 	db := client.Database("quoridory_game")
-	
-	log.Println("Conneced to the database.")
+
+	log.Println("Connected to the database.")
 	return db
 }
