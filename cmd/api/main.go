@@ -2,11 +2,11 @@ package main
 
 import (
 	"log"
-
 	"quoridor/internal/config"
 	"quoridor/internal/database"
 	"quoridor/internal/router"
 	"quoridor/internal/server"
+	"quoridor/internal/sockets"
 )
 
 func main() {
@@ -15,6 +15,8 @@ func main() {
 	cfg := config.ReadConfig()
 	_ = database.SetupDatabase(cfg)
 
-	router := router.NewRouter()
+	websocketHandler := sockets.NewWebsocketHandler()
+
+	router := router.NewRouter(websocketHandler)
 	server.Serve(router)
 }

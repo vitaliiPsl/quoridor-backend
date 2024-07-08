@@ -4,6 +4,8 @@ go 1.21.6
 
 require (
 	github.com/gin-gonic/gin v1.10.0
+	github.com/google/uuid v1.4.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/spf13/viper v1.19.0
 	go.mongodb.org/mongo-driver v1.16.0
 )
