@@ -128,3 +128,132 @@ func TestIsMoveValid(t *testing.T) {
 		}
 	}
 }
+
+func TestOverlapsWall(t *testing.T) {
+	engine := NewGameEngine()
+
+	state := &GameState{
+		Walls: []*Wall{
+			{Direction: Horizontal, Pos1: &Position{X: 2, Y: 2}, Pos2: &Position{X: 2, Y: 3}},
+			{Direction: Vertical, Pos1: &Position{X: 4, Y: 4}, Pos2: &Position{X: 5, Y: 4}},
+		},
+	}
+
+	tests := []struct {
+		wall     *Wall
+		expected bool
+	}{
+		// overlapping
+		{&Wall{Direction: Horizontal, Pos1: &Position{X: 2, Y: 2}, Pos2: &Position{X: 2, Y: 3}}, true},
+		{&Wall{Direction: Horizontal, Pos1: &Position{X: 3, Y: 2}, Pos2: &Position{X: 3, Y: 3}}, true},
+		{&Wall{Direction: Horizontal, Pos1: &Position{X: 1, Y: 2}, Pos2: &Position{X: 1, Y: 3}}, true},
+		{&Wall{Direction: Vertical, Pos1: &Position{X: 4, Y: 4}, Pos2: &Position{X: 5, Y: 4}}, true},
+		{&Wall{Direction: Vertical, Pos1: &Position{X: 4, Y: 5}, Pos2: &Position{X: 5, Y: 5}}, true},
+		{&Wall{Direction: Vertical, Pos1: &Position{X: 4, Y: 3}, Pos2: &Position{X: 5, Y: 3}}, true},
+
+		// non-overlapping
+		{&Wall{Direction: Horizontal, Pos1: &Position{X: 0, Y: 2}, Pos2: &Position{X: 0, Y: 3}}, false},
+		{&Wall{Direction: Horizontal, Pos1: &Position{X: 4, Y: 2}, Pos2: &Position{X: 4, Y: 3}}, false},
+		{&Wall{Direction: Vertical, Pos1: &Position{X: 4, Y: 6}, Pos2: &Position{X: 5, Y: 6}}, false},
+		{&Wall{Direction: Vertical, Pos1: &Position{X: 4, Y: 2}, Pos2: &Position{X: 5, Y: 2}}, false},
+		{&Wall{Direction: Vertical, Pos1: &Position{X: 2, Y: 2}, Pos2: &Position{X: 3, Y: 2}}, false},
+	}
+
+	for _, test := range tests {
+		result := engine.overlapsWall(state, test.wall)
+		if result != test.expected {
+			t.Errorf("overlapsWall(state, {%v %v %v}) = %v; want %+v", test.wall.Direction, *test.wall.Pos1, *test.wall.Pos2, result, test.expected)
+		}
+	}
+}
+
+func TestHasPathToGoal(t *testing.T) {
+	engine := NewGameEngine()
+
+	state := &GameState{
+		Player1: &Player{
+			UserId:   "player1",
+			Position: &Position{X: 4, Y: 8},
+			Goal:     0,
+		},
+		Player2: &Player{
+			UserId:   "player2",
+			Position: &Position{X: 4, Y: 0},
+			Goal:     8,
+		},
+		Walls: []*Wall{
+			{Direction: Vertical, Pos1: &Position{X: 3, Y: 0}, Pos2: &Position{X: 4, Y: 0}},
+			{Direction: Vertical, Pos1: &Position{X: 4, Y: 0}, Pos2: &Position{X: 5, Y: 0}},
+			{Direction: Vertical, Pos1: &Position{X: 3, Y: 1}, Pos2: &Position{X: 4, Y: 1}},
+			{Direction: Vertical, Pos1: &Position{X: 4, Y: 1}, Pos2: &Position{X: 5, Y: 1}},
+
+			{Direction: Vertical, Pos1: &Position{X: 3, Y: 8}, Pos2: &Position{X: 4, Y: 8}},
+			{Direction: Vertical, Pos1: &Position{X: 4, Y: 8}, Pos2: &Position{X: 5, Y: 8}},
+			{Direction: Vertical, Pos1: &Position{X: 3, Y: 7}, Pos2: &Position{X: 4, Y: 7}},
+			{Direction: Vertical, Pos1: &Position{X: 4, Y: 7}, Pos2: &Position{X: 5, Y: 7}},
+			{Direction: Horizontal, Pos1: &Position{X: 4, Y: 6}, Pos2: &Position{X: 4, Y: 7}},
+		},
+	}
+
+	tests := []struct {
+		player   *Player
+		expected bool
+	}{
+		{state.Player1, false},
+		{state.Player2, true},
+	}
+
+	for _, test := range tests {
+		result := engine.hasPathToGoal(state, test.player)
+		if result != test.expected {
+			t.Errorf("hasPathToGoal(state, %v) = %v; want %v", test.player.UserId, result, test.expected)
+		}
+	}
+}
+
+func TestIsWallPlacementValid(t *testing.T) {
+	engine := NewGameEngine()
+
+	state := &GameState{
+		Player1: &Player{
+			UserId:   "player1",
+			Position: &Position{X: 4, Y: 8},
+			Goal:     0,
+		},
+		Player2: &Player{
+			UserId:   "player2",
+			Position: &Position{X: 4, Y: 0},
+			Goal:     8,
+		},
+		Walls: []*Wall{
+			{Direction: Horizontal, Pos1: &Position{X: 2, Y: 2}, Pos2: &Position{X: 2, Y: 3}},
+			{Direction: Vertical, Pos1: &Position{X: 4, Y: 4}, Pos2: &Position{X: 5, Y: 4}},
+		},
+	}
+
+	tests := []struct {
+		wall     *Wall
+		expected bool
+	}{
+		// valid
+		{&Wall{Direction: Horizontal, Pos1: &Position{X: 0, Y: 2}, Pos2: &Position{X: 0, Y: 3}}, true},
+		{&Wall{Direction: Vertical, Pos1: &Position{X: 4, Y: 6}, Pos2: &Position{X: 5, Y: 6}}, true},
+		{&Wall{Direction: Vertical, Pos1: &Position{X: 2, Y: 2}, Pos2: &Position{X: 3, Y: 2}}, true},
+
+		// out of bounds
+		{&Wall{Direction: Horizontal, Pos1: &Position{X: 8, Y: 8}, Pos2: &Position{X: 9, Y: 8}}, false},
+		{&Wall{Direction: Vertical, Pos1: &Position{X: -1, Y: 0}, Pos2: &Position{X: -1, Y: 1}}, false},
+		{&Wall{Direction: Horizontal, Pos1: &Position{X: 8, Y: 8}, Pos2: &Position{X: 8, Y: 8}}, false},
+
+		// overlapping
+		{&Wall{Direction: Horizontal, Pos1: &Position{X: 2, Y: 2}, Pos2: &Position{X: 2, Y: 3}}, false},
+		{&Wall{Direction: Vertical, Pos1: &Position{X: 4, Y: 4}, Pos2: &Position{X: 5, Y: 4}}, false},
+	}
+
+	for _, test := range tests {
+		result := engine.IsWallPlacementValid(state, test.wall)
+		if result != test.expected {
+			t.Errorf("IsWallPlacementValid(state, %v) = %v; want %v", test.wall, result, test.expected)
+		}
+	}
+}
