@@ -2,6 +2,34 @@ package game
 
 import "testing"
 
+func TestCheckWin(t *testing.T) {
+	engine := NewGameEngine()
+	player1 := &Player{
+		UserId:   "player1",
+		Position: &Position{X: 4, Y: 0},
+		Goal:     8,
+	}
+	player2 := &Player{
+		UserId:   "player2",
+		Position: &Position{X: 4, Y: 8},
+		Goal:     0,
+	}
+
+	state := &GameState{
+		Player1: player1,
+		Player2: player2,
+	}
+
+	if engine.CheckWin(state, player1) {
+		t.Errorf("CheckWin: expected player1 not to win")
+	}
+
+	player1.Position.Y = 8
+	if !engine.CheckWin(state, player1) {
+		t.Errorf("CheckWin: expected player1 to win")
+	}
+}
+
 func TestIsWithinBounds(t *testing.T) {
 	engine := NewGameEngine()
 

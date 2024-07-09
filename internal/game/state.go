@@ -17,34 +17,35 @@ const (
 )
 
 type GameState struct {
-	GameId     string
-	GameStatus GameStatus
-	Turn       string // id of the player
-	Player1    *Player
-	Player2    *Player
-	Walls      []*Wall
+	GameId     string     `json:"game_id"`
+	GameStatus GameStatus `json:"status"`
+	Winner     string     `json:"winner,omitempty"` // id of the winner
+	Turn       string     `json:"turn"`             // id of the player
+	Player1    *Player    `json:"player_1"`
+	Player2    *Player    `json:"player_2"`
+	Walls      []*Wall    `json:"walls"`
 }
 
 type Player struct {
-	UserId   string
-	Position *Position
-	Goal     int // raw user need to get to to win the game
-	Walls    int // number of walls avaiable
+	UserId   string    `json:"user_id"`
+	Position *Position `json:"position"`
+	Goal     int       `json:"goal"`  // raw user need to get to to win the game
+	Walls    int       `json:"walls"` // number of walls avaiable
 }
 
 /*
 i'm using two positions of the cells that the wall is between to simplify checks.
-each wall spans two cells: 
+each wall spans two cells:
 - a horizontal wall starts at {pos.X, pos.Y} and ends at {pos.X + 1, pos.Y}.
 - a vertical wall starts at {pos.X, pos.Y} and ends at {pos.X, pos.Y + 1}.
 */
 type Wall struct {
-	Direction Direction
-	Pos1      *Position
-	Pos2      *Position
+	Direction Direction `json:"direction"`
+	Pos1      *Position `json:"position_1"`
+	Pos2      *Position `json:"position_2"`
 }
 
 type Position struct {
-	X int
-	Y int
+	X int `json:"x"`
+	Y int `json:"y"`
 }

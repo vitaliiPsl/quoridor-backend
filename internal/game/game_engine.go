@@ -8,6 +8,7 @@ func abs(x int) int {
 }
 
 type GameEngine interface {
+	CheckWin(state *GameState, player *Player) bool
 	IsMoveValid(state *GameState, playerId string, newPos *Position) bool
 	IsWallPlacementValid(state *GameState, wall *Wall) bool
 
@@ -23,6 +24,10 @@ type GameEngineImpl struct {
 
 func NewGameEngine() GameEngine {
 	return &GameEngineImpl{}
+}
+
+func (engine *GameEngineImpl) CheckWin(state *GameState, player *Player) bool {
+	return player.Position.Y == player.Goal
 }
 
 func (engine *GameEngineImpl) IsMoveValid(state *GameState, playerId string, newPos *Position) bool {
