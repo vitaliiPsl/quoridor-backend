@@ -29,7 +29,7 @@ func SetupDatabase(config *config.Config) *mongo.Database {
 		log.Fatalf("Failed to ping MongoDB: %v", err)
 	}
 
-	db := client.Database("quoridory_game")
+	db := client.Database("quoridor_game")
 
 	log.Println("Connected to the database.")
 	return db
