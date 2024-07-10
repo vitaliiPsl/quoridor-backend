@@ -9,66 +9,64 @@ import (
 )
 
 type GameService interface {
-	GetGameById(gameId string) (*GameState, error)
-	GetPendingGames() []*GameState
-	CreateGame(userId string) *GameState
-	JoinGame(gameId, userId string) (*GameState, error)
-	MakeMove(gameId, userId string, newPos *Position) (*GameState, error)
-	PlaceWall(gameId, userId string, wall *Wall) (*GameState, error)
+	GetGameById(gameId string) (*Game, error)
+	GetPendingGames() ([]*Game, error)
+	CreateGame(userId string) (*Game, error)
+	JoinGame(gameId, userId string) (*Game, error)
+	MakeMove(gameId, userId string, newPos *Position) (*Game, error)
+	PlaceWall(gameId, userId string, wall *Wall) (*Game, error)
 }
 
 type GameServiceImpl struct {
-	engine GameEngine
-	games  map[string]*GameState
-	mu     sync.Mutex
+	engine     GameEngine
+	repository GameRepository
+	games      map[string]*Game
+	mu         sync.Mutex
 }
 
-func NewGameService(engine GameEngine) GameService {
+func NewGameService(engine GameEngine, repository GameRepository) GameService {
 	return &GameServiceImpl{
-		engine: engine,
-		games:  make(map[string]*GameState),
+		engine:     engine,
+		repository: repository,
+		games:      make(map[string]*Game),
 	}
 }
 
-func (service *GameServiceImpl) GetGameById(gameId string) (*GameState, error) {
+func (service *GameServiceImpl) GetGameById(gameId string) (*Game, error) {
 	log.Printf("GetGameById: gameId=%v", gameId)
 
-	service.mu.Lock()
-	defer service.mu.Unlock()
+	state, err := service.repository.GetGameById(gameId)
+	if err != nil {
+		log.Printf("GetGameById: error while fetching game. err=%v", err)
+		return nil, err
+	}
 
-	gameState, ok := service.games[gameId]
-	if !ok {
+	if state == nil {
 		log.Printf("GetGameById: game with id=%s not found", gameId)
 		return nil, errors.New("game not found")
 	}
-	return gameState, nil
+
+	return state, nil
 }
 
-func (service *GameServiceImpl) GetPendingGames() []*GameState {
+func (service *GameServiceImpl) GetPendingGames() ([]*Game, error) {
 	log.Println("GetPendingGames")
 
-	service.mu.Lock()
-	defer service.mu.Unlock()
-
-	pendingGames := []*GameState{}
-	for _, state := range service.games {
-		if state.GameStatus == GameStatusPending {
-			pendingGames = append(pendingGames, state)
-		}
+	games, err := service.repository.GetGamesByStatus(GameStatusPending)
+	if err != nil {
+		log.Printf("GetPendingGames: error while fetching pending games. err=%v", err)
+		return nil, err
 	}
 
-	log.Printf("GetPendingGames: found %d pending games", len(pendingGames))
-	return pendingGames
+	log.Printf("GetPendingGames: found %d pending games", len(games))
+	return games, nil
 }
 
-func (service *GameServiceImpl) CreateGame(userId string) *GameState {
+func (service *GameServiceImpl) CreateGame(userId string) (*Game, error) {
 	log.Printf("CreateGame: userId=%v", userId)
 
-	service.mu.Lock()
-	defer service.mu.Unlock()
-
 	gameId := uuid.NewString()
-	state := &GameState{
+	state := &Game{
 		GameId:     gameId,
 		GameStatus: GameStatusPending,
 		Player1: &Player{
@@ -80,19 +78,24 @@ func (service *GameServiceImpl) CreateGame(userId string) *GameState {
 		Walls: []*Wall{},
 	}
 
-	service.games[gameId] = state
+	err := service.repository.SaveGame(state)
+	if err != nil {
+		log.Printf("CreateGame: error while saving the game. err=%v", err)
+		return nil, err
+	}
+
 	log.Printf("CreateGame: created game with id=%s for user with id=%s", gameId, userId)
-	return state
+	return state, nil
 }
 
-func (service *GameServiceImpl) JoinGame(gameId, userId string) (*GameState, error) {
+func (service *GameServiceImpl) JoinGame(gameId, userId string) (*Game, error) {
 	log.Printf("JoinGame: gameId=%v, userId=%v", gameId, userId)
 
-	service.mu.Lock()
-	defer service.mu.Unlock()
-
-	state, exists := service.games[gameId]
-	if !exists {
+	state, err := service.repository.GetGameById(gameId)
+	if err != nil {
+		return nil, err
+	}
+	if state == nil {
 		log.Printf("JoinGame: game with id=%s not found", gameId)
 		return nil, errors.New("game not found")
 	}
@@ -111,18 +114,25 @@ func (service *GameServiceImpl) JoinGame(gameId, userId string) (*GameState, err
 
 	state.GameStatus = GameStatusInProgress
 	state.Turn = state.Player1.UserId
+
+	err = service.repository.SaveGame(state)
+	if err != nil {
+		log.Printf("JoinGame: error while saving the game state. GameId=%v, err=%v", gameId, err)
+		return nil, err
+	}
+
 	log.Printf("JoinGame: user with id=%s joined game with id=%s", userId, gameId)
 	return state, nil
 }
 
-func (service *GameServiceImpl) MakeMove(gameId, userId string, newPos *Position) (*GameState, error) {
+func (service *GameServiceImpl) MakeMove(gameId, userId string, newPos *Position) (*Game, error) {
 	log.Printf("MakeMove: gameId=%v, userId=%v, new position=%+v", gameId, userId, *newPos)
 
-	service.mu.Lock()
-	defer service.mu.Unlock()
-
-	state, ok := service.games[gameId]
-	if !ok {
+	state, err := service.repository.GetGameById(gameId)
+	if err != nil {
+		return nil, err
+	}
+	if state == nil {
 		log.Printf("MakeMove: game with id=%s not found", gameId)
 		return nil, errors.New("game not found")
 	}
@@ -149,22 +159,28 @@ func (service *GameServiceImpl) MakeMove(gameId, userId string, newPos *Position
 		state.GameStatus = GameStatusCompleted
 		state.Winner = userId
 		log.Printf("MakeMove: user with id=%s has won the game with id=%s", userId, gameId)
-		return state, nil
+	} else {
+		state.Turn = service.getNextTurn(state)
+		log.Printf("MakeMove: user with id=%s moved to position=%+v in game with id=%s", userId, *newPos, gameId)
 	}
 
-	state.Turn = service.getNextTurn(state)
-	log.Printf("MakeMove: user with id=%s moved to position=%+v in game with id=%s", userId, *newPos, gameId)
+	err = service.repository.SaveGame(state)
+	if err != nil {
+		log.Printf("MakeMove: error while saving the game state. gameId=%v, err=%v", gameId, err)
+		return nil, err
+	}
+
 	return state, nil
 }
 
-func (service *GameServiceImpl) PlaceWall(gameId, userId string, wall *Wall) (*GameState, error) {
+func (service *GameServiceImpl) PlaceWall(gameId, userId string, wall *Wall) (*Game, error) {
 	log.Printf("PlaceWall: gameId=%v, userId=%v, wall={%v %+v %+v}", gameId, userId, wall.Direction, *wall.Pos1, *wall.Pos2)
 
-	service.mu.Lock()
-	defer service.mu.Unlock()
-
-	state, ok := service.games[gameId]
-	if !ok {
+	state, err := service.repository.GetGameById(gameId)
+	if err != nil {
+		return nil, err
+	}
+	if state == nil {
 		log.Printf("PlaceWall: game with id=%s not found", gameId)
 		return nil, errors.New("game not found")
 	}
@@ -190,18 +206,24 @@ func (service *GameServiceImpl) PlaceWall(gameId, userId string, wall *Wall) (*G
 	state.Walls = append(state.Walls, wall)
 	state.Turn = service.getNextTurn(state)
 
+	err = service.repository.SaveGame(state)
+	if err != nil {
+		log.Printf("PlaceWall: error while saving the game state. gameId=%v, err=%v", gameId, err)
+		return nil, err
+	}
+
 	log.Printf("PlaceWall: user with id=%s placed a wall=(%v %+v, %+v) in game with id=%s", userId, wall.Direction, *wall.Pos1, *wall.Pos2, gameId)
 	return state, nil
 }
 
-func (service *GameServiceImpl) getPlayer(state *GameState, playerId string) *Player {
+func (service *GameServiceImpl) getPlayer(state *Game, playerId string) *Player {
 	if state.Player1.UserId == playerId {
 		return state.Player1
 	}
 	return state.Player2
 }
 
-func (service *GameServiceImpl) getNextTurn(state *GameState) string {
+func (service *GameServiceImpl) getNextTurn(state *Game) string {
 	if state.Turn == state.Player1.UserId {
 		return state.Player2.UserId
 	}

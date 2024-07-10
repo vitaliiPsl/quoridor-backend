@@ -15,7 +15,7 @@ func TestCheckWin(t *testing.T) {
 		Goal:     0,
 	}
 
-	state := &GameState{
+	state := &Game{
 		Player1: player1,
 		Player2: player2,
 	}
@@ -76,7 +76,7 @@ func TestIsAdjacent(t *testing.T) {
 func TestCrossesWall(t *testing.T) {
 	engine := NewGameEngine()
 
-	state := &GameState{
+	state := &Game{
 		Walls: []*Wall{
 			{Direction: Vertical, Pos1: &Position{X: 2, Y: 2}, Pos2: &Position{X: 3, Y: 2}},
 			{Direction: Horizontal, Pos1: &Position{X: 4, Y: 4}, Pos2: &Position{X: 4, Y: 5}},
@@ -108,7 +108,7 @@ func TestCrossesWall(t *testing.T) {
 func TestIsMoveValid(t *testing.T) {
 	engine := NewGameEngine()
 
-	state := &GameState{
+	state := &Game{
 		Player1: &Player{
 			UserId:   "player1",
 			Position: &Position{X: 4, Y: 4},
@@ -160,7 +160,7 @@ func TestIsMoveValid(t *testing.T) {
 func TestOverlapsWall(t *testing.T) {
 	engine := NewGameEngine()
 
-	state := &GameState{
+	state := &Game{
 		Walls: []*Wall{
 			{Direction: Horizontal, Pos1: &Position{X: 2, Y: 2}, Pos2: &Position{X: 2, Y: 3}},
 			{Direction: Vertical, Pos1: &Position{X: 4, Y: 4}, Pos2: &Position{X: 5, Y: 4}},
@@ -198,7 +198,7 @@ func TestOverlapsWall(t *testing.T) {
 func TestHasPathToGoal(t *testing.T) {
 	engine := NewGameEngine()
 
-	state := &GameState{
+	state := &Game{
 		Player1: &Player{
 			UserId:   "player1",
 			Position: &Position{X: 4, Y: 8},
@@ -242,7 +242,7 @@ func TestHasPathToGoal(t *testing.T) {
 func TestIsWallPlacementValid(t *testing.T) {
 	engine := NewGameEngine()
 
-	state := &GameState{
+	state := &Game{
 		Player1: &Player{
 			UserId:   "player1",
 			Position: &Position{X: 4, Y: 8},

@@ -8,15 +8,15 @@ func abs(x int) int {
 }
 
 type GameEngine interface {
-	CheckWin(state *GameState, player *Player) bool
-	IsMoveValid(state *GameState, playerId string, newPos *Position) bool
-	IsWallPlacementValid(state *GameState, wall *Wall) bool
+	CheckWin(state *Game, player *Player) bool
+	IsMoveValid(state *Game, playerId string, newPos *Position) bool
+	IsWallPlacementValid(state *Game, wall *Wall) bool
 
 	isWithinBounds(pos *Position) bool
 	isAdjacent(pos1, pos2 *Position) bool
-	crossesWall(state *GameState, pos1, pos2 *Position) bool
-	overlapsWall(state *GameState, wall *Wall) bool
-	hasPathToGoal(state *GameState, player *Player) bool
+	crossesWall(state *Game, pos1, pos2 *Position) bool
+	overlapsWall(state *Game, wall *Wall) bool
+	hasPathToGoal(state *Game, player *Player) bool
 }
 
 type GameEngineImpl struct {
@@ -26,11 +26,11 @@ func NewGameEngine() GameEngine {
 	return &GameEngineImpl{}
 }
 
-func (engine *GameEngineImpl) CheckWin(state *GameState, player *Player) bool {
+func (engine *GameEngineImpl) CheckWin(state *Game, player *Player) bool {
 	return player.Position.Y == player.Goal
 }
 
-func (engine *GameEngineImpl) IsMoveValid(state *GameState, playerId string, newPos *Position) bool {
+func (engine *GameEngineImpl) IsMoveValid(state *Game, playerId string, newPos *Position) bool {
 	player := engine.getPlayer(state, playerId)
 	if player == nil {
 		return false
@@ -51,7 +51,7 @@ func (engine *GameEngineImpl) IsMoveValid(state *GameState, playerId string, new
 	return true
 }
 
-func (engine *GameEngineImpl) IsWallPlacementValid(state *GameState, wall *Wall) bool {
+func (engine *GameEngineImpl) IsWallPlacementValid(state *Game, wall *Wall) bool {
 	if wall.Pos1.X == wall.Pos2.X && wall.Pos1.Y == wall.Pos2.Y {
 		return false
 	}
@@ -74,7 +74,7 @@ func (engine *GameEngineImpl) IsWallPlacementValid(state *GameState, wall *Wall)
 	return true
 }
 
-func (engine *GameEngineImpl) getPlayer(state *GameState, playerId string) *Player {
+func (engine *GameEngineImpl) getPlayer(state *Game, playerId string) *Player {
 	if state.Player1.UserId == playerId {
 		return state.Player1
 	} else if state.Player2.UserId == playerId {
@@ -99,7 +99,7 @@ func (engine *GameEngineImpl) isAdjacent(pos1, pos2 *Position) bool {
 	return (abs(pos1.X-pos2.X) == 1 && pos1.Y == pos2.Y) || (abs(pos1.Y-pos2.Y) == 1 && pos1.X == pos2.X)
 }
 
-func (engine *GameEngineImpl) crossesWall(state *GameState, pos1, pos2 *Position) bool {
+func (engine *GameEngineImpl) crossesWall(state *Game, pos1, pos2 *Position) bool {
 	playerDirection := engine.getPlayerDirection(pos1, pos2)
 
 	for _, wall := range state.Walls {
@@ -123,7 +123,7 @@ func (engine *GameEngineImpl) crossesWall(state *GameState, pos1, pos2 *Position
 	return false
 }
 
-func (engine *GameEngineImpl) overlapsWall(state *GameState, wall *Wall) bool {
+func (engine *GameEngineImpl) overlapsWall(state *Game, wall *Wall) bool {
 	for _, existingWall := range state.Walls {
 		if wall.Direction != existingWall.Direction {
 			continue
@@ -141,7 +141,7 @@ func (engine *GameEngineImpl) overlapsWall(state *GameState, wall *Wall) bool {
 }
 
 // bfs
-func (engine *GameEngineImpl) hasPathToGoal(state *GameState, player *Player) bool {
+func (engine *GameEngineImpl) hasPathToGoal(state *Game, player *Player) bool {
 	visited := make(map[Position]bool)
 	queue := []*Position{player.Position}
 

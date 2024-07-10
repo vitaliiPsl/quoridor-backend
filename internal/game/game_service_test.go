@@ -1,228 +1,419 @@
 package game
 
 import (
+	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
+type MockGameRepository struct {
+	mock.Mock
+}
+
+func (m *MockGameRepository) SaveGame(state *Game) error {
+	args := m.Called(state)
+	return args.Error(0)
+}
+
+func (m *MockGameRepository) GetGameById(gameID string) (*Game, error) {
+	args := m.Called(gameID)
+	return args.Get(0).(*Game), args.Error(1)
+}
+
+func (m *MockGameRepository) GetGamesByStatus(status GameStatus) ([]*Game, error) {
+	args := m.Called(status)
+	return args.Get(0).([]*Game), args.Error(1)
+}
+
 func TestGetGameById(t *testing.T) {
+	repo := new(MockGameRepository)
 	engine := NewGameEngine()
-	service := NewGameService(engine)
+	service := NewGameService(engine, repo)
 
-	state := service.CreateGame("player1")
-	retrievedState, err := service.GetGameById(state.GameId)
-
-	if err != nil {
-		t.Errorf("GetGameById: expected no error, got %v", err)
+	state := &Game{
+		GameId:     "test-game-id",
+		GameStatus: GameStatusPending,
+		Player1: &Player{
+			UserId:   "player1",
+			Position: &Position{X: 4, Y: 0},
+			Goal:     8,
+			Walls:    10,
+		},
+		Walls: []*Wall{},
 	}
+	repo.On("GetGameById", "test-game-id").Return(state, nil)
 
-	if retrievedState.GameId != state.GameId {
-		t.Errorf("GetGameById: expected retrieved game ID to match, got %s, want %s", retrievedState.GameId, state.GameId)
-	}
+	retrievedState, err := service.GetGameById("test-game-id")
+
+	assert.NoError(t, err)
+	assert.Equal(t, state.GameId, retrievedState.GameId)
+	repo.AssertCalled(t, "GetGameById", "test-game-id")
 }
 
 func TestGetGameById_givenNonExistentGameId_shouldReturnError(t *testing.T) {
+	repo := new(MockGameRepository)
 	engine := NewGameEngine()
-	service := NewGameService(engine)
+	service := NewGameService(engine, repo)
 
-	nonExistentGameId := "non-existent-game-id"
-	retrievedState, err := service.GetGameById(nonExistentGameId)
+	repo.On("GetGameById", "non-existent-game-id").Return((*Game)(nil), errors.New("game not found"))
 
-	if err == nil {
-		t.Errorf("GetGameById: expected error, got none")
-	}
+	retrievedState, err := service.GetGameById("non-existent-game-id")
 
-	if retrievedState != nil {
-		t.Errorf("GetGameById: expected retrieved state to be nil")
-	}
+	assert.Error(t, err)
+	assert.Nil(t, retrievedState)
+	repo.AssertCalled(t, "GetGameById", "non-existent-game-id")
 }
 
 func TestGetPendingGames(t *testing.T) {
+	repo := new(MockGameRepository)
 	engine := NewGameEngine()
-	service := NewGameService(engine)
+	service := NewGameService(engine, repo)
 
-	service.CreateGame("player1")
-	service.CreateGame("player2")
-
-	pendingGames := service.GetPendingGames()
-	if len(pendingGames) != 2 {
-		t.Errorf("GetPendingGames: expected 2 pending games, got %d", len(pendingGames))
+	game1 := &Game{
+		GameId:     "game1",
+		GameStatus: GameStatusPending,
 	}
+	game2 := &Game{
+		GameId:     "game2",
+		GameStatus: GameStatusPending,
+	}
+
+	repo.On("GetGamesByStatus", GameStatusPending).Return([]*Game{game1, game2}, nil)
+
+	pendingGames, err := service.GetPendingGames()
+	assert.NoError(t, err)
+	assert.Len(t, pendingGames, 2)
+	repo.AssertCalled(t, "GetGamesByStatus", GameStatusPending)
 }
 
 func TestGetPendingGames_givenNoPendingGames_shouldReturnEmptyList(t *testing.T) {
+	repo := new(MockGameRepository)
 	engine := NewGameEngine()
-	service := NewGameService(engine)
+	service := NewGameService(engine, repo)
 
-	pendingGames := service.GetPendingGames()
-	if len(pendingGames) != 0 {
-		t.Errorf("GetPendingGames: expected 0 pending games, got %d", len(pendingGames))
-	}
-}
+	repo.On("GetGamesByStatus", GameStatusPending).Return([]*Game{}, nil)
 
-func TestGetPendingGames_givenGameJoined_shouldReturnOnePendingGame(t *testing.T) {
-	engine := NewGameEngine()
-	service := NewGameService(engine)
-
-	service.CreateGame("player1")
-	service.CreateGame("player2")
-
-	pendingGames := service.GetPendingGames()
-	_, err := service.JoinGame(pendingGames[0].GameId, "player3")
-	if err != nil {
-		t.Errorf("JoinGame: expected no error, got %v", err)
-	}
-
-	pendingGames = service.GetPendingGames()
-	if len(pendingGames) != 1 {
-		t.Errorf("GetPendingGames: expected 1 pending game, got %d", len(pendingGames))
-	}
+	pendingGames, err := service.GetPendingGames()
+	assert.NoError(t, err)
+	assert.Empty(t, pendingGames)
+	repo.AssertCalled(t, "GetGamesByStatus", GameStatusPending)
 }
 
 func TestCreateGame(t *testing.T) {
+	repo := new(MockGameRepository)
 	engine := NewGameEngine()
-	service := NewGameService(engine)
+	service := NewGameService(engine, repo)
 
-	state := service.CreateGame("player1")
+	repo.On("SaveGame", mock.Anything).Return(nil)
 
-	if state.Player1.UserId != "player1" {
-		t.Errorf("CreateGame: player1 ID not set correctly")
-	}
+	state, err := service.CreateGame("player1")
+	assert.NoError(t, err)
+	assert.Equal(t, "player1", state.Player1.UserId)
+	assert.Equal(t, GameStatusPending, state.GameStatus)
+	assert.Equal(t, &Position{X: 4, Y: 0}, state.Player1.Position)
+	assert.Equal(t, 10, state.Player1.Walls)
 
-	if state.GameStatus != GameStatusPending {
-		t.Errorf("CreateGame: game status should be pending")
-	}
-
-	if state.Player1.Position.X != 4 || state.Player1.Position.Y != 0 {
-		t.Errorf("CreateGame: player1 initial position not set correctly")
-	}
-
-	if state.Player1.Walls != 10 {
-		t.Errorf("CreateGame: initial wall count not set correctly")
-	}
+	repo.AssertCalled(t, "SaveGame", mock.Anything)
 }
 
 func TestJoinGame(t *testing.T) {
+	repo := new(MockGameRepository)
 	engine := NewGameEngine()
-	service := NewGameService(engine)
+	service := NewGameService(engine, repo)
 
-	state := service.CreateGame("player1")
-	joinedState, err := service.JoinGame(state.GameId, "player2")
-
-	if err != nil {
-		t.Errorf("JoinGame: expected no error, got %v", err)
+	state := &Game{
+		GameId:     "test-game-id",
+		GameStatus: GameStatusPending,
+		Player1: &Player{
+			UserId:   "player1",
+			Position: &Position{X: 4, Y: 0},
+			Goal:     8,
+			Walls:    10,
+		},
+		Walls: []*Wall{},
 	}
 
-	if joinedState.Player2.UserId != "player2" {
-		t.Errorf("JoinGame: player2 ID not set correctly")
-	}
+	repo.On("GetGameById", "test-game-id").Return(state, nil)
+	repo.On("SaveGame", mock.Anything).Return(nil)
 
-	if joinedState.GameStatus != GameStatusInProgress {
-		t.Errorf("JoinGame: game status should be in progress")
-	}
+	joinedState, err := service.JoinGame("test-game-id", "player2")
+	assert.NoError(t, err)
+	assert.Equal(t, "player2", joinedState.Player2.UserId)
+	assert.Equal(t, GameStatusInProgress, joinedState.GameStatus)
+
+	repo.AssertCalled(t, "GetGameById", "test-game-id")
+	repo.AssertCalled(t, "SaveGame", mock.Anything)
 }
 
 func TestJoinGame_givenNonExistentGameId_shouldReturnError(t *testing.T) {
+	repo := new(MockGameRepository)
 	engine := NewGameEngine()
-	service := NewGameService(engine)
+	service := NewGameService(engine, repo)
+
+	repo.On("GetGameById", "non-existent-game-id").Return((*Game)(nil), errors.New("game not found"))
 
 	_, err := service.JoinGame("non-existent-game-id", "player2")
-	if err == nil {
-		t.Errorf("JoinGame: expected error due to non-existent game, got none")
-	}
+	assert.Error(t, err)
+
+	repo.AssertCalled(t, "GetGameById", "non-existent-game-id")
 }
 
 func TestJoinGame_givenGameAlreadyStarted_shouldReturnError(t *testing.T) {
+	repo := new(MockGameRepository)
 	engine := NewGameEngine()
-	service := NewGameService(engine)
+	service := NewGameService(engine, repo)
 
-	state := service.CreateGame("player1")
-	service.JoinGame(state.GameId, "player2") // Start the game
-	_, err := service.JoinGame(state.GameId, "player3")
-	if err == nil {
-		t.Errorf("JoinGame: expected error due to game already started, got none")
+	state := &Game{
+		GameId:     "test-game-id",
+		GameStatus: GameStatusInProgress,
+		Player1: &Player{
+			UserId:   "player1",
+			Position: &Position{X: 4, Y: 0},
+			Goal:     8,
+			Walls:    10,
+		},
+		Player2: &Player{
+			UserId:   "player2",
+			Position: &Position{X: 4, Y: 8},
+			Goal:     0,
+			Walls:    10,
+		},
+		Walls: []*Wall{},
 	}
+
+	repo.On("GetGameById", "test-game-id").Return(state, nil)
+
+	_, err := service.JoinGame("test-game-id", "player3")
+	assert.Error(t, err)
+
+	repo.AssertCalled(t, "GetGameById", "test-game-id")
 }
 
 func TestMakeMove(t *testing.T) {
+	repo := new(MockGameRepository)
 	engine := NewGameEngine()
-	service := NewGameService(engine)
+	service := NewGameService(engine, repo)
 
-	state := service.CreateGame("player1")
-	service.JoinGame(state.GameId, "player2")
-
-	validMove := &Position{X: 4, Y: 1}
-	updatedState, err := service.MakeMove(state.GameId, "player1", validMove)
-	if err != nil {
-		t.Errorf("MakeMove: expected no error, got %v", err)
+	state := &Game{
+		GameId:     "test-game-id",
+		GameStatus: GameStatusInProgress,
+		Player1: &Player{
+			UserId:   "player1",
+			Position: &Position{X: 4, Y: 4},
+			Goal:     8,
+			Walls:    10,
+		},
+		Player2: &Player{
+			UserId:   "player2",
+			Position: &Position{X: 4, Y: 8},
+			Goal:     0,
+			Walls:    10,
+		},
+		Turn:  "player1",
+		Walls: []*Wall{},
 	}
 
-	if updatedState.Player1.Position.X != 4 || updatedState.Player1.Position.Y != 1 {
-		t.Errorf("MakeMove: player1 position not updated correctly")
+	repo.On("GetGameById", "test-game-id").Return(state, nil)
+	repo.On("SaveGame", mock.Anything).Return(nil)
+
+	validMove := &Position{X: 4, Y: 5}
+	updatedState, err := service.MakeMove("test-game-id", "player1", validMove)
+	assert.NoError(t, err)
+	assert.Equal(t, validMove, updatedState.Player1.Position)
+	assert.Equal(t, "player2", updatedState.Turn)
+
+	repo.AssertCalled(t, "GetGameById", "test-game-id")
+	repo.AssertCalled(t, "SaveGame", mock.Anything)
+}
+
+func TestMakeMove_givenGameNotFound_shouldReturnError(t *testing.T) {
+	repo := new(MockGameRepository)
+	engine := NewGameEngine()
+	service := NewGameService(engine, repo)
+
+	repo.On("GetGameById", "test-game-id").Return((*Game)(nil), nil)
+
+	newPos := &Position{
+		X: 2, Y: 2,
 	}
 
-	if updatedState.Turn != "player2" {
-		t.Errorf("MakeMove: turn should switch to player2")
+	_, err := service.MakeMove("test-game-id", "player2", newPos)
+	assert.Error(t, err)
+
+	repo.AssertCalled(t, "GetGameById", "test-game-id")
+	repo.AssertNotCalled(t, "SaveGame", mock.Anything)
+}
+
+func TestMakeMove_givenGameNotInProgress_shouldReturnError(t *testing.T) {
+	repo := new(MockGameRepository)
+	engine := NewGameEngine()
+	service := NewGameService(engine, repo)
+
+	state := &Game{
+		GameId:     "test-game-id",
+		GameStatus: GameStatusCompleted,
+		Player1: &Player{
+			UserId:   "player1",
+			Position: &Position{X: 4, Y: 4},
+			Goal:     8,
+			Walls:    10,
+		},
+		Player2: &Player{
+			UserId:   "player2",
+			Position: &Position{X: 4, Y: 8},
+			Goal:     0,
+			Walls:    10,
+		},
+		Turn:  "player1",
+		Walls: []*Wall{},
 	}
+
+	repo.On("GetGameById", "test-game-id").Return(state, nil)
+
+	newPos := &Position{
+		X: 2, Y: 2,
+	}
+
+	_, err := service.MakeMove("test-game-id", "player2", newPos)
+	assert.Error(t, err)
+
+	repo.AssertCalled(t, "GetGameById", "test-game-id")
+	repo.AssertNotCalled(t, "SaveGame", mock.Anything)
 }
 
 func TestMakeMove_givenInvalidMove_shouldReturnError(t *testing.T) {
+	repo := new(MockGameRepository)
 	engine := NewGameEngine()
-	service := NewGameService(engine)
+	service := NewGameService(engine, repo)
 
-	state := service.CreateGame("player1")
-	service.JoinGame(state.GameId, "player2")
-
-	invalidMove := &Position{X: 5, Y: 1}
-	_, err := service.MakeMove(state.GameId, "player1", invalidMove)
-	if err == nil {
-		t.Errorf("MakeMove: expected error due to invalid move, got none")
+	state := &Game{
+		GameId:     "test-game-id",
+		GameStatus: GameStatusInProgress,
+		Player1: &Player{
+			UserId:   "player1",
+			Position: &Position{X: 4, Y: 4},
+			Goal:     8,
+			Walls:    10,
+		},
+		Player2: &Player{
+			UserId:   "player2",
+			Position: &Position{X: 4, Y: 8},
+			Goal:     0,
+			Walls:    10,
+		},
+		Turn:  "player1",
+		Walls: []*Wall{},
 	}
+
+	repo.On("GetGameById", "test-game-id").Return(state, nil)
+
+	invalidMove := &Position{X: 5, Y: 5}
+	_, err := service.MakeMove("test-game-id", "player1", invalidMove)
+	assert.Error(t, err)
+
+	repo.AssertCalled(t, "GetGameById", "test-game-id")
+	repo.AssertNotCalled(t, "SaveGame", mock.Anything)
 }
 
 func TestMakeMove_givenNotPlayersTurn_shouldReturnError(t *testing.T) {
+	repo := new(MockGameRepository)
 	engine := NewGameEngine()
-	service := NewGameService(engine)
+	service := NewGameService(engine, repo)
 
-	state := service.CreateGame("player1")
-	service.JoinGame(state.GameId, "player2")
-
-	validMove := &Position{X: 4, Y: 1}
-	_, err := service.MakeMove(state.GameId, "player2", validMove)
-	if err == nil {
-		t.Errorf("MakeMove: expected error due to not player's turn, got none")
+	state := &Game{
+		GameId:     "test-game-id",
+		GameStatus: GameStatusInProgress,
+		Player1: &Player{
+			UserId:   "player1",
+			Position: &Position{X: 4, Y: 4},
+			Goal:     8,
+			Walls:    10,
+		},
+		Player2: &Player{
+			UserId:   "player2",
+			Position: &Position{X: 4, Y: 8},
+			Goal:     0,
+			Walls:    10,
+		},
+		Turn:  "player1",
+		Walls: []*Wall{},
 	}
+
+	repo.On("GetGameById", "test-game-id").Return(state, nil)
+
+	validMove := &Position{X: 4, Y: 5}
+	_, err := service.MakeMove("test-game-id", "player2", validMove)
+	assert.Error(t, err)
+
+	repo.AssertCalled(t, "GetGameById", "test-game-id")
+	repo.AssertNotCalled(t, "SaveGame", mock.Anything)
 }
 
 func TestMakeMove_givenWinningMove_shouldCompleteGame(t *testing.T) {
+	repo := new(MockGameRepository)
 	engine := NewGameEngine()
-	service := NewGameService(engine)
+	service := NewGameService(engine, repo)
 
-	state := service.CreateGame("player1")
-	service.JoinGame(state.GameId, "player2")
+	state := &Game{
+		GameId:     "test-game-id",
+		GameStatus: GameStatusInProgress,
+		Player1: &Player{
+			UserId:   "player1",
+			Position: &Position{X: 4, Y: 7},
+			Goal:     8,
+			Walls:    10,
+		},
+		Player2: &Player{
+			UserId:   "player2",
+			Position: &Position{X: 4, Y: 0},
+			Goal:     0,
+			Walls:    10,
+		},
+		Turn:  "player1",
+		Walls: []*Wall{},
+	}
 
-	state.Player1.Position = &Position{4, 7}
+	repo.On("GetGameById", "test-game-id").Return(state, nil)
+	repo.On("SaveGame", mock.Anything).Return(nil)
 
 	winningMove := &Position{X: 4, Y: 8}
-	updatedState, err := service.MakeMove(state.GameId, "player1", winningMove)
-	if err != nil {
-		t.Errorf("MakeMove: expected no error, got %v", err)
-	}
+	updatedState, err := service.MakeMove("test-game-id", "player1", winningMove)
+	assert.NoError(t, err)
+	assert.Equal(t, GameStatusCompleted, updatedState.GameStatus)
+	assert.Equal(t, "player1", updatedState.Winner)
 
-	if updatedState.GameStatus != GameStatusCompleted {
-		t.Errorf("MakeMove: game status should be completed after winning move")
-	}
-
-	if updatedState.Winner != "player1" {
-		t.Errorf("MakeMove: expected winner to be player1, got %s", updatedState.Winner)
-	}
+	repo.AssertCalled(t, "GetGameById", "test-game-id")
+	repo.AssertCalled(t, "SaveGame", mock.Anything)
 }
 
 func TestPlaceWall(t *testing.T) {
+	repo := new(MockGameRepository)
 	engine := NewGameEngine()
-	service := NewGameService(engine)
+	service := NewGameService(engine, repo)
 
-	state := service.CreateGame("player1")
-	service.JoinGame(state.GameId, "player2")
+	state := &Game{
+		GameId:     "test-game-id",
+		GameStatus: GameStatusInProgress,
+		Player1: &Player{
+			UserId:   "player1",
+			Position: &Position{X: 4, Y: 4},
+			Goal:     8,
+			Walls:    10,
+		},
+		Player2: &Player{
+			UserId:   "player2",
+			Position: &Position{X: 4, Y: 8},
+			Goal:     0,
+			Walls:    10,
+		},
+		Turn:  "player1",
+		Walls: []*Wall{},
+	}
+
+	repo.On("GetGameById", "test-game-id").Return(state, nil)
+	repo.On("SaveGame", mock.Anything).Return(nil)
 
 	validWall := &Wall{
 		Direction: Horizontal,
@@ -230,26 +421,100 @@ func TestPlaceWall(t *testing.T) {
 		Pos2:      &Position{X: 3, Y: 2},
 	}
 
-	updatedState, err := service.PlaceWall(state.GameId, "player1", validWall)
-	if err != nil {
-		t.Errorf("PlaceWall: expected no error, got %v", err)
+	updatedState, err := service.PlaceWall("test-game-id", "player1", validWall)
+	assert.NoError(t, err)
+	assert.Len(t, updatedState.Walls, 1)
+	assert.Equal(t, validWall, updatedState.Walls[0])
+	assert.Equal(t, 9, updatedState.Player1.Walls)
+
+	repo.AssertCalled(t, "GetGameById", "test-game-id")
+	repo.AssertCalled(t, "SaveGame", mock.Anything)
+}
+
+func TestPlaceWall_givenGameNotFound_shouldReturnError(t *testing.T) {
+	repo := new(MockGameRepository)
+	engine := NewGameEngine()
+	service := NewGameService(engine, repo)
+
+	repo.On("GetGameById", "test-game-id").Return((*Game)(nil), nil)
+
+	wall := &Wall{
+		Direction: Horizontal,
+		Pos1:      &Position{X: 2, Y: 2},
+		Pos2:      &Position{X: 3, Y: 2},
 	}
 
-	if len(updatedState.Walls) != 1 {
-		t.Errorf("PlaceWall: wall count should be 1")
+	_, err := service.PlaceWall("test-game-id", "player2", wall)
+	assert.Error(t, err)
+
+	repo.AssertCalled(t, "GetGameById", "test-game-id")
+	repo.AssertNotCalled(t, "SaveGame", mock.Anything)
+}
+
+func TestPlaceWall_givenGameNotInProgress_shouldReturnError(t *testing.T) {
+	repo := new(MockGameRepository)
+	engine := NewGameEngine()
+	service := NewGameService(engine, repo)
+
+	state := &Game{
+		GameId:     "test-game-id",
+		GameStatus: GameStatusCompleted,
+		Player1: &Player{
+			UserId:   "player1",
+			Position: &Position{X: 4, Y: 4},
+			Goal:     8,
+			Walls:    10,
+		},
+		Player2: &Player{
+			UserId:   "player2",
+			Position: &Position{X: 4, Y: 8},
+			Goal:     0,
+			Walls:    10,
+		},
+		Turn:  "player1",
+		Walls: []*Wall{},
 	}
 
-	if updatedState.Player1.Walls != 9 {
-		t.Errorf("PlaceWall: player1 wall count should be decremented")
+	repo.On("GetGameById", "test-game-id").Return(state, nil)
+
+	wall := &Wall{
+		Direction: Horizontal,
+		Pos1:      &Position{X: 2, Y: 2},
+		Pos2:      &Position{X: 3, Y: 2},
 	}
+
+	_, err := service.PlaceWall("test-game-id", "player2", wall)
+	assert.Error(t, err)
+
+	repo.AssertCalled(t, "GetGameById", "test-game-id")
+	repo.AssertNotCalled(t, "SaveGame", mock.Anything)
 }
 
 func TestPlaceWall_givenInvalidPlacement_shouldReturnError(t *testing.T) {
+	repo := new(MockGameRepository)
 	engine := NewGameEngine()
-	service := NewGameService(engine)
+	service := NewGameService(engine, repo)
 
-	state := service.CreateGame("player1")
-	service.JoinGame(state.GameId, "player2")
+	state := &Game{
+		GameId:     "test-game-id",
+		GameStatus: GameStatusInProgress,
+		Player1: &Player{
+			UserId:   "player1",
+			Position: &Position{X: 4, Y: 4},
+			Goal:     8,
+			Walls:    10,
+		},
+		Player2: &Player{
+			UserId:   "player2",
+			Position: &Position{X: 4, Y: 8},
+			Goal:     0,
+			Walls:    10,
+		},
+		Turn:  "player1",
+		Walls: []*Wall{},
+	}
+
+	repo.On("GetGameById", "test-game-id").Return(state, nil)
 
 	invalidWall := &Wall{
 		Direction: Horizontal,
@@ -257,27 +522,48 @@ func TestPlaceWall_givenInvalidPlacement_shouldReturnError(t *testing.T) {
 		Pos2:      &Position{X: 9, Y: 8},
 	}
 
-	_, err := service.PlaceWall(state.GameId, "player1", invalidWall)
-	if err == nil {
-		t.Errorf("PlaceWall: expected error due to invalid wall placement, got none")
-	}
+	_, err := service.PlaceWall("test-game-id", "player1", invalidWall)
+	assert.Error(t, err)
+
+	repo.AssertCalled(t, "GetGameById", "test-game-id")
+	repo.AssertNotCalled(t, "SaveGame", mock.Anything)
 }
 
 func TestPlaceWall_givenNotPlayersTurn_shouldReturnError(t *testing.T) {
+	repo := new(MockGameRepository)
 	engine := NewGameEngine()
-	service := NewGameService(engine)
+	service := NewGameService(engine, repo)
 
-	state := service.CreateGame("player1")
-	service.JoinGame(state.GameId, "player2")
+	state := &Game{
+		GameId:     "test-game-id",
+		GameStatus: GameStatusInProgress,
+		Player1: &Player{
+			UserId:   "player1",
+			Position: &Position{X: 4, Y: 4},
+			Goal:     8,
+			Walls:    10,
+		},
+		Player2: &Player{
+			UserId:   "player2",
+			Position: &Position{X: 4, Y: 8},
+			Goal:     0,
+			Walls:    10,
+		},
+		Turn:  "player1",
+		Walls: []*Wall{},
+	}
+
+	repo.On("GetGameById", "test-game-id").Return(state, nil)
 
 	validWall := &Wall{
 		Direction: Horizontal,
 		Pos1:      &Position{X: 2, Y: 2},
-			Pos2:      &Position{X: 3, Y: 2},
+		Pos2:      &Position{X: 3, Y: 2},
 	}
 
-	_, err := service.PlaceWall(state.GameId, "player2", validWall)
-	if err == nil {
-		t.Errorf("PlaceWall: expected error due to not player's turn, got none")
-	}
+	_, err := service.PlaceWall("test-game-id", "player2", validWall)
+	assert.Error(t, err)
+
+	repo.AssertCalled(t, "GetGameById", "test-game-id")
+	repo.AssertNotCalled(t, "SaveGame", mock.Anything)
 }
