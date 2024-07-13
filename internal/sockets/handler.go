@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/gorilla/websocket"
 )
 
@@ -21,15 +22,17 @@ type WebsocketHandler interface {
 }
 
 type WebsocketHandlerImpl struct {
+	service WebsocketService
 }
 
-func NewWebsocketHandler() *WebsocketHandlerImpl {
+func NewWebsocketHandler(service WebsocketService) *WebsocketHandlerImpl {
 	return &WebsocketHandlerImpl{
+		service: service,
 	}
 }
 
 // https://quoridory.domain.io/v1/ws?user_id=1234
-func (h *WebsocketHandlerImpl) HandleWs(c *gin.Context) {
+func (handler *WebsocketHandlerImpl) HandleWs(c *gin.Context) {
 	userId := c.Query("user_id")
 	if userId == "" {
 		http.Error(c.Writer, "User id is required", http.StatusBadRequest)
@@ -41,5 +44,11 @@ func (h *WebsocketHandlerImpl) HandleWs(c *gin.Context) {
 		log.Println("Failed to upgrade to websocket:", err)
 		return
 	}
-	defer conn.Close()
+
+	client := NewWebsocketClient(userId, conn, handler.service)
+
+	handler.service.RegisterClient(client)
+
+	go client.ReadMessage()
+	go client.WriteMessage()
 }
