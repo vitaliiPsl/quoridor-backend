@@ -11,8 +11,7 @@ import (
 type GameService interface {
 	GetGameById(gameId string) (*Game, error)
 	GetPendingGames() ([]*Game, error)
-	CreateGame(userId string) (*Game, error)
-	JoinGame(gameId, userId string) (*Game, error)
+	CreateGame(user1Id, user2Id string) (*Game, error)
 	MakeMove(gameId, userId string, newPos *Position) (*Game, error)
 	PlaceWall(gameId, userId string, wall *Wall) (*Game, error)
 }
@@ -62,19 +61,26 @@ func (service *GameServiceImpl) GetPendingGames() ([]*Game, error) {
 	return games, nil
 }
 
-func (service *GameServiceImpl) CreateGame(userId string) (*Game, error) {
-	log.Printf("CreateGame: userId=%v", userId)
+func (service *GameServiceImpl) CreateGame(user1Id, user2Id string) (*Game, error) {
+	log.Printf("CreateGame: user1Id=%v, user2Id=%v", user1Id, user2Id)
 
 	gameId := uuid.NewString()
 	state := &Game{
 		GameId:     gameId,
-		GameStatus: GameStatusPending,
+		GameStatus: GameStatusInProgress,
 		Player1: &Player{
-			UserId:   userId,
+			UserId:   user1Id,
 			Position: &Position{X: 4, Y: 0},
 			Goal:     8,
 			Walls:    10,
 		},
+		Player2: &Player{
+			UserId:   user2Id,
+			Position: &Position{X: 4, Y: 8},
+			Goal:     0,
+			Walls:    10,
+		},
+		Turn:  user1Id,
 		Walls: []*Wall{},
 	}
 
@@ -84,44 +90,7 @@ func (service *GameServiceImpl) CreateGame(userId string) (*Game, error) {
 		return nil, err
 	}
 
-	log.Printf("CreateGame: created game with id=%s for user with id=%s", gameId, userId)
-	return state, nil
-}
-
-func (service *GameServiceImpl) JoinGame(gameId, userId string) (*Game, error) {
-	log.Printf("JoinGame: gameId=%v, userId=%v", gameId, userId)
-
-	state, err := service.repository.GetGameById(gameId)
-	if err != nil {
-		return nil, err
-	}
-	if state == nil {
-		log.Printf("JoinGame: game with id=%s not found", gameId)
-		return nil, errors.New("game not found")
-	}
-
-	if state.GameStatus != GameStatusPending {
-		log.Printf("JoinGame: game with id=%s already started", gameId)
-		return nil, errors.New("game already started")
-	}
-
-	state.Player2 = &Player{
-		UserId:   userId,
-		Position: &Position{X: 4, Y: 8},
-		Goal:     0,
-		Walls:    10,
-	}
-
-	state.GameStatus = GameStatusInProgress
-	state.Turn = state.Player1.UserId
-
-	err = service.repository.SaveGame(state)
-	if err != nil {
-		log.Printf("JoinGame: error while saving the game state. GameId=%v, err=%v", gameId, err)
-		return nil, err
-	}
-
-	log.Printf("JoinGame: user with id=%s joined game with id=%s", userId, gameId)
+	log.Printf("CreateGame: created game with id=%s for users with ids %s and %s", gameId, user1Id, user2Id)
 	return state, nil
 }
 
