@@ -3,7 +3,7 @@ package game
 import (
 	"errors"
 	"log"
-	"sync"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -19,15 +19,12 @@ type GameService interface {
 type GameServiceImpl struct {
 	engine     GameEngine
 	repository GameRepository
-	games      map[string]*Game
-	mu         sync.Mutex
 }
 
 func NewGameService(engine GameEngine, repository GameRepository) GameService {
 	return &GameServiceImpl{
 		engine:     engine,
 		repository: repository,
-		games:      make(map[string]*Game),
 	}
 }
 
@@ -65,6 +62,8 @@ func (service *GameServiceImpl) CreateGame(user1Id, user2Id string) (*Game, erro
 	log.Printf("CreateGame: user1Id=%v, user2Id=%v", user1Id, user2Id)
 
 	gameId := uuid.NewString()
+	now := time.Now()
+
 	state := &Game{
 		GameId:     gameId,
 		GameStatus: GameStatusInProgress,
@@ -80,8 +79,11 @@ func (service *GameServiceImpl) CreateGame(user1Id, user2Id string) (*Game, erro
 			Goal:     0,
 			Walls:    10,
 		},
-		Turn:  user1Id,
-		Walls: []*Wall{},
+		Turn:      user1Id,
+		Walls:     []*Wall{},
+		Moves:     []*Move{},
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 
 	err := service.repository.SaveGame(state)
@@ -124,9 +126,20 @@ func (service *GameServiceImpl) MakeMove(gameId, userId string, newPos *Position
 	player := service.getPlayer(state, userId)
 	player.Position = newPos
 
+	move := &Move{
+		UserId:    userId,
+		Type:      MoveTypeMove,
+		Position:  newPos,
+		Timestamp: time.Now(),
+	}
+	state.Moves = append(state.Moves, move)
+	state.UpdatedAt = time.Now()
+
 	if service.engine.CheckWin(state, player) {
 		state.GameStatus = GameStatusCompleted
 		state.Winner = userId
+		completedAt := time.Now()
+		state.CompletedAt = &completedAt
 		log.Printf("MakeMove: user with id=%s has won the game with id=%s", userId, gameId)
 	} else {
 		state.Turn = service.getNextTurn(state)
@@ -171,6 +184,15 @@ func (service *GameServiceImpl) PlaceWall(gameId, userId string, wall *Wall) (*G
 
 	player := service.getPlayer(state, userId)
 	player.Walls--
+
+	move := &Move{
+		UserId:    userId,
+		Type:      MoveTypePlaceWall,
+		Wall:      wall,
+		Timestamp: time.Now(),
+	}
+	state.Moves = append(state.Moves, move)
+	state.UpdatedAt = time.Now()
 
 	state.Walls = append(state.Walls, wall)
 	state.Turn = service.getNextTurn(state)

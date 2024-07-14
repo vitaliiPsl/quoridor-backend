@@ -3,6 +3,7 @@ package game
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -117,6 +118,8 @@ func TestCreateGame(t *testing.T) {
 	assert.Equal(t, &Position{X: 4, Y: 8}, state.Player2.Position)
 	assert.Equal(t, 10, state.Player1.Walls)
 	assert.Equal(t, 10, state.Player2.Walls)
+	assert.NotEmpty(t, state.CreatedAt)
+	assert.NotEmpty(t, state.UpdatedAt)
 
 	repo.AssertCalled(t, "SaveGame", mock.Anything)
 }
@@ -153,6 +156,10 @@ func TestMakeMove(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, validMove, updatedState.Player1.Position)
 	assert.Equal(t, "player2", updatedState.Turn)
+	assert.Len(t, updatedState.Moves, 1)
+	assert.Equal(t, validMove, updatedState.Moves[0].Position)
+	assert.Equal(t, MoveTypeMove, updatedState.Moves[0].Type)
+	assert.NotEmpty(t, updatedState.UpdatedAt)
 
 	repo.AssertCalled(t, "GetGameById", "test-game-id")
 	repo.AssertCalled(t, "SaveGame", mock.Anything)
@@ -313,6 +320,7 @@ func TestMakeMove_givenWinningMove_shouldCompleteGame(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, GameStatusCompleted, updatedState.GameStatus)
 	assert.Equal(t, "player1", updatedState.Winner)
+	assert.NotNil(t, updatedState.CompletedAt)
 
 	repo.AssertCalled(t, "GetGameById", "test-game-id")
 	repo.AssertCalled(t, "SaveGame", mock.Anything)
@@ -356,6 +364,10 @@ func TestPlaceWall(t *testing.T) {
 	assert.Len(t, updatedState.Walls, 1)
 	assert.Equal(t, validWall, updatedState.Walls[0])
 	assert.Equal(t, 9, updatedState.Player1.Walls)
+	assert.Len(t, updatedState.Moves, 1)
+	assert.Equal(t, validWall, updatedState.Moves[0].Wall)
+	assert.Equal(t, MoveTypePlaceWall, updatedState.Moves[0].Type)
+	assert.WithinDuration(t, time.Now(), updatedState.UpdatedAt, time.Second)
 
 	repo.AssertCalled(t, "GetGameById", "test-game-id")
 	repo.AssertCalled(t, "SaveGame", mock.Anything)
