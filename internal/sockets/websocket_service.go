@@ -3,6 +3,9 @@ package sockets
 import (
 	"encoding/json"
 	"log"
+	"quoridor/internal/events"
+	"quoridor/internal/game"
+	"quoridor/internal/matchmaking"
 	"sync"
 )
 
@@ -11,16 +14,21 @@ type WebsocketService interface {
 	UnregisterClient(userId string)
 	SendMessage(userId string, message *WebsocketMessage)
 	HandleMessage(userId string, message *WebsocketMessage)
+	HandleMatchFound(event *events.Event)
 }
 
 type WebsocketServiceImpl struct {
-	mutex   sync.Mutex
-	clients map[string]*Client
+	mutex       sync.Mutex
+	clients     map[string]*Client
+	mmService   matchmaking.MatchmakingService
+	gameService game.GameService
 }
 
-func NewWebsocketService() *WebsocketServiceImpl {
+func NewWebsocketService(mmService matchmaking.MatchmakingService, gameService game.GameService) *WebsocketServiceImpl {
 	return &WebsocketServiceImpl{
-		clients: map[string]*Client{},
+		clients:     map[string]*Client{},
+		mmService:   mmService,
+		gameService: gameService,
 	}
 }
 
@@ -54,36 +62,33 @@ func (service *WebsocketServiceImpl) HandleMessage(userId string, message *Webso
 	log.Printf("Handling websocket message: userId=%v, type=%v", userId, message.Type)
 
 	switch message.Type {
-	case EventTypeSendMessage:
-		service.handleSendMessageEvent(userId, message)
+	case EventTypeStartGame:
+		service.mmService.AddUser(userId)
 	default:
 		log.Printf("Unknown message type: %v", message.Type)
 	}
-}
+};
 
-func (service *WebsocketServiceImpl) handleSendMessageEvent(userId string, message *WebsocketMessage) {
-	log.Printf("Handling send message event: userId=%v", userId)
+func (service *WebsocketServiceImpl) HandleMatchFound(event *events.Event) {
+	data := event.Data.(map[string]string)
+	user1Id := data["user1Id"]
+	user2Id := data["user2Id"]
 
-	sendMessagePayload := SendMessagePayload{}
-	if err := json.Unmarshal(message.Payload, &sendMessagePayload); err != nil {
-		log.Printf("Failed to unmarshal websocket message payload: userId=%v", userId)
+	log.Printf("Handling match found: user1Id=%v, user2Id=%v", user1Id, user2Id)
+
+	game, err := service.gameService.CreateGame(user1Id, user2Id)
+	if err != nil {
+		log.Printf("Error creating game: %v", err)
 		return
 	}
 
-	receiveMessagePayload := ReceiveMessagePayload{
-		SenderId: userId,
-		Message: sendMessagePayload.Message,
-	}
-	
-	payload, err := json.Marshal(receiveMessagePayload)
+	payload, err := json.Marshal(game)
 	if err != nil {
-		log.Printf("Failed to marshal websocket message payload: userId=%v", userId)
-		return	
+		log.Printf("Failed to marshal game state: err=%v", err)
+		return
 	}
 
-	message = &WebsocketMessage{
-		Type: EventTypeReceiveMessage,
-		Payload: payload,
-	}
-	service.SendMessage(sendMessagePayload.ReceiverId, message)
+	message := WebsocketMessage{Type: EventTypeGameState, Payload: payload}
+	service.SendMessage(user1Id, &message)
+	service.SendMessage(user2Id, &message)
 }
