@@ -58,16 +58,32 @@ func (service *WebsocketServiceImpl) SendMessage(userId string, message *Websock
 	}
 }
 
+func (service *WebsocketServiceImpl) broadcastGameState(game *game.Game) {
+	payload, err := json.Marshal(game)
+	if err != nil {
+		log.Printf("Failed to marshal game state: err=%v", err)
+		return
+	}
+
+	message := WebsocketMessage{Type: EventTypeGameState, Payload: payload}
+	service.SendMessage(game.Player1.UserId, &message)
+	service.SendMessage(game.Player2.UserId, &message)
+}
+
 func (service *WebsocketServiceImpl) HandleMessage(userId string, message *WebsocketMessage) {
 	log.Printf("Handling websocket message: userId=%v, type=%v", userId, message.Type)
 
 	switch message.Type {
 	case EventTypeStartGame:
 		service.mmService.AddUser(userId)
+	case EventTypeMakeMove:
+		service.handleMove(userId, message)
+	case EventTypePlaceWall:
+		service.handlePlaceWall(userId, message)
 	default:
 		log.Printf("Unknown message type: %v", message.Type)
 	}
-};
+}
 
 func (service *WebsocketServiceImpl) HandleMatchFound(event *events.Event) {
 	data := event.Data.(map[string]string)
@@ -82,13 +98,41 @@ func (service *WebsocketServiceImpl) HandleMatchFound(event *events.Event) {
 		return
 	}
 
-	payload, err := json.Marshal(game)
-	if err != nil {
-		log.Printf("Failed to marshal game state: err=%v", err)
+	service.broadcastGameState(game)
+}
+
+func (service *WebsocketServiceImpl) handleMove(userId string, message *WebsocketMessage) {
+	log.Printf("Handling move: userId=%v", userId)
+
+	payload := MakeMovePayload{}
+	if err := json.Unmarshal(message.Payload, &payload); err != nil {
+		log.Printf("Failed to unmarshal move payload: %v", err)
 		return
 	}
 
-	message := WebsocketMessage{Type: EventTypeGameState, Payload: payload}
-	service.SendMessage(user1Id, &message)
-	service.SendMessage(user2Id, &message)
+	game, err := service.gameService.MakeMove(payload.GameId, userId, &payload.Position)
+	if err != nil {
+		log.Printf("Error making move: %v", err)
+		return
+	}
+
+	service.broadcastGameState(game)
+}
+
+func (service *WebsocketServiceImpl) handlePlaceWall(userId string, message *WebsocketMessage) {
+	log.Printf("Handling wall placement: userId=%v", userId)
+
+	payload := PlaceWallPayload{}
+	if err := json.Unmarshal(message.Payload, &payload); err != nil {
+		log.Printf("Failed to unmarshal wall payload: %v", err)
+		return
+	}
+
+	game, err := service.gameService.PlaceWall(payload.GameId, userId, &payload.Wall)
+	if err != nil {
+		log.Printf("Error placing wall: %v", err)
+		return
+	}
+
+	service.broadcastGameState(game)
 }
