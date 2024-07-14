@@ -1,9 +1,10 @@
 package game
 
 import (
-	"errors"
 	"testing"
 	"time"
+
+	"quoridor/internal/errors"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -58,11 +59,11 @@ func TestGetGameById_givenNonExistentGameId_shouldReturnError(t *testing.T) {
 	engine := NewGameEngine()
 	service := NewGameService(engine, repo)
 
-	repo.On("GetGameById", "non-existent-game-id").Return((*Game)(nil), errors.New("game not found"))
+	repo.On("GetGameById", "non-existent-game-id").Return((*Game)(nil), errors.ErrInternalError)
 
 	retrievedState, err := service.GetGameById("non-existent-game-id")
 
-	assert.Error(t, err)
+	assert.ErrorIs(t, err, errors.ErrInternalError)
 	assert.Nil(t, retrievedState)
 	repo.AssertCalled(t, "GetGameById", "non-existent-game-id")
 }
@@ -170,14 +171,14 @@ func TestMakeMove_givenGameNotFound_shouldReturnError(t *testing.T) {
 	engine := NewGameEngine()
 	service := NewGameService(engine, repo)
 
-	repo.On("GetGameById", "test-game-id").Return((*Game)(nil), nil)
+	repo.On("GetGameById", "test-game-id").Return((*Game)(nil), errors.ErrInternalError)
 
 	newPos := &Position{
 		X: 2, Y: 2,
 	}
 
 	_, err := service.MakeMove("test-game-id", "player2", newPos)
-	assert.Error(t, err)
+	assert.ErrorIs(t, err, errors.ErrInternalError)
 
 	repo.AssertCalled(t, "GetGameById", "test-game-id")
 	repo.AssertNotCalled(t, "SaveGame", mock.Anything)
@@ -214,7 +215,7 @@ func TestMakeMove_givenGameNotInProgress_shouldReturnError(t *testing.T) {
 	}
 
 	_, err := service.MakeMove("test-game-id", "player2", newPos)
-	assert.Error(t, err)
+	assert.ErrorIs(t, err, errors.ErrGameNotInProgress)
 
 	repo.AssertCalled(t, "GetGameById", "test-game-id")
 	repo.AssertNotCalled(t, "SaveGame", mock.Anything)
@@ -248,7 +249,7 @@ func TestMakeMove_givenInvalidMove_shouldReturnError(t *testing.T) {
 
 	invalidMove := &Position{X: 5, Y: 5}
 	_, err := service.MakeMove("test-game-id", "player1", invalidMove)
-	assert.Error(t, err)
+	assert.ErrorIs(t, err, errors.ErrInvalidMove)
 
 	repo.AssertCalled(t, "GetGameById", "test-game-id")
 	repo.AssertNotCalled(t, "SaveGame", mock.Anything)
@@ -282,7 +283,7 @@ func TestMakeMove_givenNotPlayersTurn_shouldReturnError(t *testing.T) {
 
 	validMove := &Position{X: 4, Y: 5}
 	_, err := service.MakeMove("test-game-id", "player2", validMove)
-	assert.Error(t, err)
+	assert.ErrorIs(t, err, errors.ErrNotPlayersTurn)
 
 	repo.AssertCalled(t, "GetGameById", "test-game-id")
 	repo.AssertNotCalled(t, "SaveGame", mock.Anything)
@@ -378,7 +379,7 @@ func TestPlaceWall_givenGameNotFound_shouldReturnError(t *testing.T) {
 	engine := NewGameEngine()
 	service := NewGameService(engine, repo)
 
-	repo.On("GetGameById", "test-game-id").Return((*Game)(nil), nil)
+	repo.On("GetGameById", "test-game-id").Return((*Game)(nil), errors.ErrInternalError)
 
 	wall := &Wall{
 		Direction: Horizontal,
@@ -387,7 +388,7 @@ func TestPlaceWall_givenGameNotFound_shouldReturnError(t *testing.T) {
 	}
 
 	_, err := service.PlaceWall("test-game-id", "player2", wall)
-	assert.Error(t, err)
+	assert.ErrorIs(t, err, errors.ErrInternalError)
 
 	repo.AssertCalled(t, "GetGameById", "test-game-id")
 	repo.AssertNotCalled(t, "SaveGame", mock.Anything)
@@ -426,7 +427,7 @@ func TestPlaceWall_givenGameNotInProgress_shouldReturnError(t *testing.T) {
 	}
 
 	_, err := service.PlaceWall("test-game-id", "player2", wall)
-	assert.Error(t, err)
+	assert.ErrorIs(t, err, errors.ErrGameNotInProgress)
 
 	repo.AssertCalled(t, "GetGameById", "test-game-id")
 	repo.AssertNotCalled(t, "SaveGame", mock.Anything)
@@ -465,7 +466,7 @@ func TestPlaceWall_givenInvalidPlacement_shouldReturnError(t *testing.T) {
 	}
 
 	_, err := service.PlaceWall("test-game-id", "player1", invalidWall)
-	assert.Error(t, err)
+	assert.ErrorIs(t, err, errors.ErrInvalidWallPlacement)
 
 	repo.AssertCalled(t, "GetGameById", "test-game-id")
 	repo.AssertNotCalled(t, "SaveGame", mock.Anything)
@@ -504,7 +505,7 @@ func TestPlaceWall_givenNotPlayersTurn_shouldReturnError(t *testing.T) {
 	}
 
 	_, err := service.PlaceWall("test-game-id", "player2", validWall)
-	assert.Error(t, err)
+	assert.ErrorIs(t, err, errors.ErrNotPlayersTurn)
 
 	repo.AssertCalled(t, "GetGameById", "test-game-id")
 	repo.AssertNotCalled(t, "SaveGame", mock.Anything)

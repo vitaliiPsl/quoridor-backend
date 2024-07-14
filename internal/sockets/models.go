@@ -15,6 +15,7 @@ const (
 
 	// OUT
 	EventTypeGameState EventType = "game_state"
+	EventTypeError     EventType = "error"
 )
 
 type WebsocketMessage struct {
@@ -30,4 +31,8 @@ type MakeMovePayload struct {
 type PlaceWallPayload struct {
 	GameId string    `json:"game_id"`
 	Wall   game.Wall `json:"wall"`
+}
+
+type ErrorMessagePayload struct {
+	ErrorType string `json:"error_type"`
 }

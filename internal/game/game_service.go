@@ -1,8 +1,8 @@
 package game
 
 import (
-	"errors"
 	"log"
+	"quoridor/internal/errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -29,37 +29,37 @@ func NewGameService(engine GameEngine, repository GameRepository) GameService {
 }
 
 func (service *GameServiceImpl) GetGameById(gameId string) (*Game, error) {
-	log.Printf("GetGameById: gameId=%v", gameId)
+	log.Printf("Fetching game by id: gameId=%v", gameId)
 
 	state, err := service.repository.GetGameById(gameId)
 	if err != nil {
-		log.Printf("GetGameById: error while fetching game. err=%v", err)
-		return nil, err
+		log.Printf("Error while fetching game. err=%v", err)
+		return nil, errors.ErrInternalError
 	}
 
 	if state == nil {
-		log.Printf("GetGameById: game with id=%s not found", gameId)
-		return nil, errors.New("game not found")
+		log.Printf("Game with id=%s not found", gameId)
+		return nil, errors.ErrGameNotFound
 	}
 
 	return state, nil
 }
 
 func (service *GameServiceImpl) GetPendingGames() ([]*Game, error) {
-	log.Println("GetPendingGames")
+	log.Println("Fetching pending games")
 
 	games, err := service.repository.GetGamesByStatus(GameStatusPending)
 	if err != nil {
-		log.Printf("GetPendingGames: error while fetching pending games. err=%v", err)
-		return nil, err
+		log.Printf("Error while fetching pending games. err=%v", err)
+		return nil, errors.ErrInternalError
 	}
 
-	log.Printf("GetPendingGames: found %d pending games", len(games))
+	log.Printf("Fetched %d pending games", len(games))
 	return games, nil
 }
 
 func (service *GameServiceImpl) CreateGame(user1Id, user2Id string) (*Game, error) {
-	log.Printf("CreateGame: user1Id=%v, user2Id=%v", user1Id, user2Id)
+	log.Printf("Creating new game: user1Id=%v, user2Id=%v", user1Id, user2Id)
 
 	gameId := uuid.NewString()
 	now := time.Now()
@@ -88,39 +88,40 @@ func (service *GameServiceImpl) CreateGame(user1Id, user2Id string) (*Game, erro
 
 	err := service.repository.SaveGame(state)
 	if err != nil {
-		log.Printf("CreateGame: error while saving the game. err=%v", err)
-		return nil, err
+		log.Printf("Error while saving the game. err=%v", err)
+		return nil, errors.ErrInternalError
 	}
 
-	log.Printf("CreateGame: created game with id=%s for users with ids %s and %s", gameId, user1Id, user2Id)
+	log.Printf("Created game with id=%s for users with ids %s and %s", gameId, user1Id, user2Id)
 	return state, nil
 }
 
 func (service *GameServiceImpl) MakeMove(gameId, userId string, newPos *Position) (*Game, error) {
-	log.Printf("MakeMove: gameId=%v, userId=%v, new position=%+v", gameId, userId, *newPos)
+	log.Printf("Making move: gameId=%v, userId=%v, new position=%+v", gameId, userId, *newPos)
 
 	state, err := service.repository.GetGameById(gameId)
 	if err != nil {
-		return nil, err
+		log.Printf("Error while fetching game. err=%v", err)
+		return nil, errors.ErrInternalError
 	}
 	if state == nil {
-		log.Printf("MakeMove: game with id=%s not found", gameId)
-		return nil, errors.New("game not found")
+		log.Printf("Game with id=%s not found", gameId)
+		return nil, errors.ErrGameNotFound
 	}
 
 	if state.GameStatus != GameStatusInProgress {
-		log.Printf("MakeMove: game with id=%s is not in progress", gameId)
-		return nil, errors.New("game not in progress")
+		log.Printf("Game with id=%s is not in progress", gameId)
+		return nil, errors.ErrGameNotInProgress
 	}
 
 	if state.Turn != userId {
-		log.Printf("MakeMove: it is not user with id=%s turn in game with id=%s", userId, gameId)
-		return nil, errors.New("not player's turn")
+		log.Printf("It is not turn of user with id=%s in game with id=%s", userId, gameId)
+		return nil, errors.ErrNotPlayersTurn
 	}
 
 	if !service.engine.IsMoveValid(state, userId, newPos) {
-		log.Printf("MakeMove: invalid move by user with id=%s in game with id=%s. Move=%+v", userId, gameId, *newPos)
-		return nil, errors.New("invalid move")
+		log.Printf("Invalid move by user with id=%s in game with id=%s. Move=%+v", userId, gameId, *newPos)
+		return nil, errors.ErrInvalidMove
 	}
 
 	player := service.getPlayer(state, userId)
@@ -140,16 +141,16 @@ func (service *GameServiceImpl) MakeMove(gameId, userId string, newPos *Position
 		state.Winner = userId
 		completedAt := time.Now()
 		state.CompletedAt = &completedAt
-		log.Printf("MakeMove: user with id=%s has won the game with id=%s", userId, gameId)
+		log.Printf("User with id=%s has won the game with id=%s", userId, gameId)
 	} else {
 		state.Turn = service.getNextTurn(state)
-		log.Printf("MakeMove: user with id=%s moved to position=%+v in game with id=%s", userId, *newPos, gameId)
+		log.Printf("User with id=%s moved to position=%+v in game with id=%s", userId, *newPos, gameId)
 	}
 
 	err = service.repository.SaveGame(state)
 	if err != nil {
-		log.Printf("MakeMove: error while saving the game state. gameId=%v, err=%v", gameId, err)
-		return nil, err
+		log.Printf("Error while saving the game state. gameId=%v, err=%v", gameId, err)
+		return nil, errors.ErrInternalError
 	}
 
 	return state, nil
@@ -160,26 +161,26 @@ func (service *GameServiceImpl) PlaceWall(gameId, userId string, wall *Wall) (*G
 
 	state, err := service.repository.GetGameById(gameId)
 	if err != nil {
-		return nil, err
+		return nil, errors.ErrInternalError
 	}
 	if state == nil {
 		log.Printf("PlaceWall: game with id=%s not found", gameId)
-		return nil, errors.New("game not found")
+		return nil, errors.ErrGameNotFound
 	}
 
 	if state.GameStatus != GameStatusInProgress {
 		log.Printf("PlaceWall: game with id=%s is not in progress", gameId)
-		return nil, errors.New("game not in progress")
+		return nil, errors.ErrGameNotInProgress
 	}
 
 	if state.Turn != userId {
 		log.Printf("PlaceWall: it is not user with id=%s turn in game with id=%s", userId, gameId)
-		return nil, errors.New("not player's turn")
+		return nil, errors.ErrNotPlayersTurn
 	}
 
 	if !service.engine.IsWallPlacementValid(state, wall) {
 		log.Printf("PlaceWall: invalid wall placement by user with id=%s in game with id=%s. Wall={%v %+v %+v}", userId, gameId, wall.Direction, *wall.Pos1, *wall.Pos2)
-		return nil, errors.New("invalid wall placement")
+		return nil, errors.ErrInvalidWallPlacement
 	}
 
 	player := service.getPlayer(state, userId)
@@ -200,7 +201,7 @@ func (service *GameServiceImpl) PlaceWall(gameId, userId string, wall *Wall) (*G
 	err = service.repository.SaveGame(state)
 	if err != nil {
 		log.Printf("PlaceWall: error while saving the game state. gameId=%v, err=%v", gameId, err)
-		return nil, err
+		return nil, errors.ErrInternalError
 	}
 
 	log.Printf("PlaceWall: user with id=%s placed a wall=(%v %+v, %+v) in game with id=%s", userId, wall.Direction, *wall.Pos1, *wall.Pos2, gameId)

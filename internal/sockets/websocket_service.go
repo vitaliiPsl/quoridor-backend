@@ -3,6 +3,7 @@ package sockets
 import (
 	"encoding/json"
 	"log"
+	"quoridor/internal/errors"
 	"quoridor/internal/events"
 	"quoridor/internal/game"
 	"quoridor/internal/matchmaking"
@@ -12,7 +13,6 @@ import (
 type WebsocketService interface {
 	RegisterClient(client *Client)
 	UnregisterClient(userId string)
-	SendMessage(userId string, message *WebsocketMessage)
 	HandleMessage(userId string, message *WebsocketMessage)
 	HandleMatchFound(event *events.Event)
 }
@@ -50,12 +50,28 @@ func (service *WebsocketServiceImpl) UnregisterClient(userId string) {
 	delete(service.clients, userId)
 }
 
-func (service *WebsocketServiceImpl) SendMessage(userId string, message *WebsocketMessage) {
+func (service *WebsocketServiceImpl) sendMessage(userId string, message *WebsocketMessage) {
 	log.Printf("Sending websocket message: userId=%v, type=%v", userId, message.Type)
 
 	if client, ok := service.clients[userId]; ok {
 		client.messages <- message
 	}
+}
+
+func (service *WebsocketServiceImpl) sendErrorMessage(userId string, err error) {
+	log.Printf("Error: userId=%v, err=%v", userId, err)
+
+	errorPayload := ErrorMessagePayload{
+		ErrorType: err.Error(),
+	}
+	payload, err := json.Marshal(errorPayload)
+	if err != nil {
+		log.Printf("Failed to marshal error payload: err=%v", err)
+		return
+	}
+
+	message := WebsocketMessage{Type: EventTypeError, Payload: payload}
+	service.sendMessage(userId, &message)
 }
 
 func (service *WebsocketServiceImpl) broadcastGameState(game *game.Game) {
@@ -66,8 +82,8 @@ func (service *WebsocketServiceImpl) broadcastGameState(game *game.Game) {
 	}
 
 	message := WebsocketMessage{Type: EventTypeGameState, Payload: payload}
-	service.SendMessage(game.Player1.UserId, &message)
-	service.SendMessage(game.Player2.UserId, &message)
+	service.sendMessage(game.Player1.UserId, &message)
+	service.sendMessage(game.Player2.UserId, &message)
 }
 
 func (service *WebsocketServiceImpl) HandleMessage(userId string, message *WebsocketMessage) {
@@ -82,6 +98,7 @@ func (service *WebsocketServiceImpl) HandleMessage(userId string, message *Webso
 		service.handlePlaceWall(userId, message)
 	default:
 		log.Printf("Unknown message type: %v", message.Type)
+		service.sendErrorMessage(userId, errors.ErrBadRequest)
 	}
 }
 
@@ -94,7 +111,8 @@ func (service *WebsocketServiceImpl) HandleMatchFound(event *events.Event) {
 
 	game, err := service.gameService.CreateGame(user1Id, user2Id)
 	if err != nil {
-		log.Printf("Error creating game: %v", err)
+		service.sendErrorMessage(user1Id, err)
+		service.sendErrorMessage(user2Id, err)
 		return
 	}
 
@@ -106,13 +124,14 @@ func (service *WebsocketServiceImpl) handleMove(userId string, message *Websocke
 
 	payload := MakeMovePayload{}
 	if err := json.Unmarshal(message.Payload, &payload); err != nil {
-		log.Printf("Failed to unmarshal move payload: %v", err)
+		log.Printf("Failed to unmarshal move request: userId=%v, err=%v", userId, err)
+		service.sendErrorMessage(userId, errors.ErrBadRequest)
 		return
 	}
 
 	game, err := service.gameService.MakeMove(payload.GameId, userId, &payload.Position)
 	if err != nil {
-		log.Printf("Error making move: %v", err)
+		service.sendErrorMessage(userId, err)
 		return
 	}
 
@@ -124,13 +143,14 @@ func (service *WebsocketServiceImpl) handlePlaceWall(userId string, message *Web
 
 	payload := PlaceWallPayload{}
 	if err := json.Unmarshal(message.Payload, &payload); err != nil {
-		log.Printf("Failed to unmarshal wall payload: %v", err)
+		log.Printf("Failed to unmarshal wall placement request: userId=%v, err=%v", userId, err)
+		service.sendErrorMessage(userId, errors.ErrBadRequest)
 		return
 	}
 
 	game, err := service.gameService.PlaceWall(payload.GameId, userId, &payload.Wall)
 	if err != nil {
-		log.Printf("Error placing wall: %v", err)
+		service.sendErrorMessage(userId, err)
 		return
 	}
 
