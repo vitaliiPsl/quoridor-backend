@@ -2,6 +2,7 @@ package matchmaking
 
 import (
 	"log"
+	"quoridor/internal/events"
 	"time"
 )
 
@@ -12,12 +13,14 @@ type MatchmakingService interface {
 }
 
 type MatchmakingServiceImpl struct {
-	queue MatchmakingQueue
+	queue        MatchmakingQueue
+	eventService events.EventService
 }
 
-func NewMatchmakingService() *MatchmakingServiceImpl {
+func NewMatchmakingService(queue MatchmakingQueue, eventService events.EventService) *MatchmakingServiceImpl {
 	return &MatchmakingServiceImpl{
-		queue: NewInMemoryMatchmakingQueue(),
+		queue:        queue,
+		eventService: eventService,
 	}
 }
 
@@ -43,8 +46,20 @@ func (service *MatchmakingServiceImpl) StartMatchmaking() {
 
 func (service *MatchmakingServiceImpl) matchUsers() {
 	matches := service.queue.FindMatches()
-
 	for _, match := range matches {
-		log.Printf("Found match: match=%v", match)
+		service.notifyAboutMatch(match)
 	}
+}
+
+func (service *MatchmakingServiceImpl) notifyAboutMatch(match *Match) {
+	log.Printf("Found match: match=%v", match)
+
+	matchEvent := &events.Event{
+		Type: events.EventTypeMatchFound,
+		Data: map[string]string{
+			"user1Id": match.User1Id,
+			"user2Id": match.User2Id,
+		},
+	}
+	service.eventService.Publish(matchEvent)
 }
