@@ -73,6 +73,48 @@ func TestIsAdjacent(t *testing.T) {
 	}
 }
 
+func TestIsJumpOverOpponent(t *testing.T) {
+	engine := NewGameEngine()
+
+	state := &Game{
+		Player1: &Player{
+			UserId:   "player1",
+			Position: &Position{X: 4, Y: 4},
+		},
+		Player2: &Player{
+			UserId:   "player2",
+			Position: &Position{X: 4, Y: 5},
+		},
+		Walls: []*Wall{
+			{Direction: Horizontal, Pos1: &Position{X: 4, Y: 6}, Pos2: &Position{X: 4, Y: 7}},
+			{Direction: Horizontal, Pos1: &Position{X: 4, Y: 3}, Pos2: &Position{X: 4, Y: 4}}, // wall behind player 1
+			{Direction: Vertical, Pos1: &Position{X: 3, Y: 5}, Pos2: &Position{X: 4, Y: 5}}, // wall on the left of player 2
+		},
+	}
+
+	tests := []struct {
+		playerId string
+		newPos   *Position
+		expected bool
+	}{
+		{"player1", &Position{X: 4, Y: 6}, true},
+		{"player1", &Position{X: 4, Y: 3}, false}, // not adjacent to the player 2 
+		{"player1", &Position{X: 5, Y: 5}, false}, // there is not wall behind player 2, so diagonal jumps are not allowd 
+		{"player2", &Position{X: 4, Y: 3}, false}, // wall behind player 1
+		{"player2", &Position{X: 3, Y: 4}, true},
+		{"player2", &Position{X: 5, Y: 4}, true},
+	}
+
+	for _, test := range tests {
+		player := engine.getPlayer(state, test.playerId)
+		opponent := engine.getOpponent(state, test.playerId)
+		result := engine.isJumpOverOpponent(state, player, opponent, test.newPos)
+		if result != test.expected {
+			t.Errorf("isJumpOverOpponent(%v, %v, %v, %v) = %v; want %v", state, player, opponent, test.newPos, result, test.expected)
+		}
+	}
+}
+
 func TestCrossesWall(t *testing.T) {
 	engine := NewGameEngine()
 
@@ -134,7 +176,9 @@ func TestIsMoveValid(t *testing.T) {
 
 		// non-adjacent
 		{"player1", &Position{X: 6, Y: 4}, false},
-		{"player1", &Position{X: 4, Y: 6}, false},
+
+		// valid jump over opponent
+		{"player1", &Position{X: 4, Y: 6}, true},
 
 		// cross walls
 		{"player1", &Position{X: 2, Y: 2}, false},
@@ -157,7 +201,7 @@ func TestIsMoveValid(t *testing.T) {
 	}
 }
 
-func TestOverlapsWall(t *testing.T) {
+func TestWallsOverlap(t *testing.T) {
 	engine := NewGameEngine()
 
 	state := &Game{
@@ -188,9 +232,9 @@ func TestOverlapsWall(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		result := engine.overlapsWall(state, test.wall)
+		result := engine.wallsOverlap(state, test.wall)
 		if result != test.expected {
-			t.Errorf("overlapsWall(state, {%v %v %v}) = %v; want %+v", test.wall.Direction, *test.wall.Pos1, *test.wall.Pos2, result, test.expected)
+			t.Errorf("wallsOverlap(state, {%v %v %v}) = %v; want %+v", test.wall.Direction, *test.wall.Pos1, *test.wall.Pos2, result, test.expected)
 		}
 	}
 }
