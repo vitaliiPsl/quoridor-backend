@@ -30,7 +30,7 @@ func (engine *GameEngineImpl) IsMoveValid(state *Game, playerId string, newPosit
 	player := engine.getPlayer(state, playerId)
 	opponent := engine.getOpponent(state, playerId)
 
-	if engine.positionsEqual(player.Position, opponent.Position) {
+	if engine.positionsEqual(opponent.Position, newPosition) {
 		return false
 	}
 

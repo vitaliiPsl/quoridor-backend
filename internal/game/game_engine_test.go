@@ -186,6 +186,9 @@ func TestIsMoveValid(t *testing.T) {
 		{"player2", &Position{X: 5, Y: 4}, false},
 		{"player2", &Position{X: 5, Y: 6}, false},
 
+		// move to the opponent's square
+		{"player1", &Position{X: 4, Y: 5}, false},
+
 		// valid
 		{"player1", &Position{X: 4, Y: 3}, true},
 		{"player1", &Position{X: 3, Y: 4}, true},
