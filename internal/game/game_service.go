@@ -157,33 +157,39 @@ func (service *GameServiceImpl) MakeMove(gameId, userId string, newPos *Position
 }
 
 func (service *GameServiceImpl) PlaceWall(gameId, userId string, wall *Wall) (*Game, error) {
-	log.Printf("PlaceWall: gameId=%v, userId=%v, wall={%v %+v %+v}", gameId, userId, wall.Direction, *wall.Pos1, *wall.Pos2)
+	log.Printf("Placing wall: gameId=%v, userId=%v, wall={%v %+v %+v}", gameId, userId, wall.Direction, *wall.Pos1, *wall.Pos2)
 
 	state, err := service.repository.GetGameById(gameId)
 	if err != nil {
 		return nil, errors.ErrInternalError
 	}
+
 	if state == nil {
-		log.Printf("PlaceWall: game with id=%s not found", gameId)
+		log.Printf("Game with id=%s not found", gameId)
 		return nil, errors.ErrGameNotFound
 	}
 
 	if state.GameStatus != GameStatusInProgress {
-		log.Printf("PlaceWall: game with id=%s is not in progress", gameId)
+		log.Printf("Game with id=%s is not in progress", gameId)
 		return nil, errors.ErrGameNotInProgress
 	}
 
 	if state.Turn != userId {
-		log.Printf("PlaceWall: it is not user with id=%s turn in game with id=%s", userId, gameId)
+		log.Printf("It is not user with id=%s turn in game with id=%s", userId, gameId)
 		return nil, errors.ErrNotPlayersTurn
 	}
 
-	if !service.engine.IsWallPlacementValid(state, wall) {
-		log.Printf("PlaceWall: invalid wall placement by user with id=%s in game with id=%s. Wall={%v %+v %+v}", userId, gameId, wall.Direction, *wall.Pos1, *wall.Pos2)
+	player := service.getPlayer(state, userId)
+	if player.Walls <= 0 {
+		log.Printf("User with id=%s has no walls left in game with id=%s", userId, gameId)
 		return nil, errors.ErrInvalidWallPlacement
 	}
 
-	player := service.getPlayer(state, userId)
+	if !service.engine.IsWallPlacementValid(state, wall) {
+		log.Printf("Invalid wall placement by user with id=%s in game with id=%s. Wall={%v %+v %+v}", userId, gameId, wall.Direction, *wall.Pos1, *wall.Pos2)
+		return nil, errors.ErrInvalidWallPlacement
+	}
+
 	player.Walls--
 
 	move := &Move{
@@ -200,11 +206,11 @@ func (service *GameServiceImpl) PlaceWall(gameId, userId string, wall *Wall) (*G
 
 	err = service.repository.SaveGame(state)
 	if err != nil {
-		log.Printf("PlaceWall: error while saving the game state. gameId=%v, err=%v", gameId, err)
+		log.Printf("Error while saving the game state. gameId=%v, err=%v", gameId, err)
 		return nil, errors.ErrInternalError
 	}
 
-	log.Printf("PlaceWall: user with id=%s placed a wall=(%v %+v, %+v) in game with id=%s", userId, wall.Direction, *wall.Pos1, *wall.Pos2, gameId)
+	log.Printf("User with id=%s placed a wall=(%v %+v, %+v) in game with id=%s", userId, wall.Direction, *wall.Pos1, *wall.Pos2, gameId)
 	return state, nil
 }
 

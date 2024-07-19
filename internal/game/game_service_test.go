@@ -510,3 +510,42 @@ func TestPlaceWall_givenNotPlayersTurn_shouldReturnError(t *testing.T) {
 	repo.AssertCalled(t, "GetGameById", "test-game-id")
 	repo.AssertNotCalled(t, "SaveGame", mock.Anything)
 }
+
+func TestPlaceWall_givenNoWallsLeft_shouldReturnError(t *testing.T) {
+	repo := new(MockGameRepository)
+	engine := NewGameEngine()
+	service := NewGameService(engine, repo)
+
+	state := &Game{
+		GameId:     "test-game-id",
+		GameStatus: GameStatusInProgress,
+		Player1: &Player{
+			UserId:   "player1",
+			Position: &Position{X: 4, Y: 4},
+			Goal:     8,
+			Walls:    0,
+		},
+		Player2: &Player{
+			UserId:   "player2",
+			Position: &Position{X: 4, Y: 8},
+			Goal:     0,
+			Walls:    10,
+		},
+		Turn:  "player1",
+		Walls: []*Wall{},
+	}
+
+	repo.On("GetGameById", "test-game-id").Return(state, nil)
+
+	validWall := &Wall{
+		Direction: Horizontal,
+		Pos1:      &Position{X: 2, Y: 2},
+		Pos2:      &Position{X: 3, Y: 2},
+	}
+
+	_, err := service.PlaceWall("test-game-id", "player1", validWall)
+	assert.ErrorIs(t, err, errors.ErrInvalidWallPlacement)
+
+	repo.AssertCalled(t, "GetGameById", "test-game-id")
+	repo.AssertNotCalled(t, "SaveGame", mock.Anything)
+}
