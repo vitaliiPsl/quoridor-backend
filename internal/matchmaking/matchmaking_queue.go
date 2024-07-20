@@ -2,6 +2,7 @@ package matchmaking
 
 import (
 	"math"
+	"quoridor/internal/utils"
 	"slices"
 	"sync"
 	"time"
@@ -15,12 +16,12 @@ type MatchmakingQueue interface {
 
 type InMemoryMatchmakingQueue struct {
 	mu    sync.Mutex
-	queue []*MatchRequest
+	queue map[string]*MatchRequest
 }
 
 func NewInMemoryMatchmakingQueue() *InMemoryMatchmakingQueue {
 	return &InMemoryMatchmakingQueue{
-		queue: []*MatchRequest{},
+		queue: make(map[string]*MatchRequest),
 	}
 }
 
@@ -28,23 +29,19 @@ func (mq *InMemoryMatchmakingQueue) AddUserToQueue(userId string) {
 	mq.mu.Lock()
 	defer mq.mu.Unlock()
 
-	req := MatchRequest{
-		UserId:   userId,
-		JoinTime: time.Now(),
+	if _, exists := mq.queue[userId]; !exists {
+		mq.queue[userId] = &MatchRequest{
+			UserId:   userId,
+			JoinTime: time.Now(),
+		}
 	}
-	mq.queue = append(mq.queue, &req)
 }
 
 func (mq *InMemoryMatchmakingQueue) RemoveUserFromQueue(userId string) {
 	mq.mu.Lock()
 	defer mq.mu.Unlock()
 
-	for idx, req := range mq.queue {
-		if req.UserId == userId {
-			mq.queue = append(mq.queue[:idx], mq.queue[idx+1:]...)
-			return
-		}
-	}
+	delete(mq.queue, userId)
 }
 
 func (mq *InMemoryMatchmakingQueue) FindMatches() []*Match {
@@ -56,20 +53,21 @@ func (mq *InMemoryMatchmakingQueue) FindMatches() []*Match {
 		return matches
 	}
 
-	slices.SortFunc(mq.queue, func(req1, req2 *MatchRequest) int {
+	queue := utils.MapToValuesSlice(mq.queue)
+	slices.SortFunc(queue, func(req1, req2 *MatchRequest) int {
 		if req1.JoinTime.Before(req2.JoinTime) {
 			return -1
 		}
 		return 1
 	})
 
-	for i := 0; i < len(mq.queue); i++ {
-		req1 := mq.queue[i]
+	for i := 0; i < len(queue); i++ {
+		req1 := queue[i]
 		bestMatch := -1
 		bestScore := math.MaxFloat64
 
-		for j := i + 1; j < len(mq.queue); j++ {
-			req2 := mq.queue[j]
+		for j := i + 1; j < len(queue); j++ {
+			req2 := queue[j]
 			score := mq.calculateScore(req1, req2)
 			if score < bestScore {
 				bestMatch = j
@@ -80,15 +78,18 @@ func (mq *InMemoryMatchmakingQueue) FindMatches() []*Match {
 		if bestMatch != -1 {
 			match := &Match{
 				User1Id: req1.UserId,
-				User2Id: mq.queue[bestMatch].UserId,
+				User2Id: queue[bestMatch].UserId,
 			}
 			matches = append(matches, match)
-			mq.queue = append(mq.queue[:i], mq.queue[i+1:]...)
+			queue = append(queue[:i], queue[i+1:]...)
 			if bestMatch > i {
 				bestMatch--
 			}
-			mq.queue = append(mq.queue[:bestMatch], mq.queue[bestMatch+1:]...)
+			queue = append(queue[:bestMatch], queue[bestMatch+1:]...)
 			i--
+			
+			delete(mq.queue, match.User1Id)
+			delete(mq.queue, match.User2Id)
 		}
 	}
 

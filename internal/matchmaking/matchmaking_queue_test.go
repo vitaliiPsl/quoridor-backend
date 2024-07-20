@@ -16,7 +16,20 @@ func TestAddUserToQueue(t *testing.T) {
 	defer mq.mu.Unlock()
 
 	assert.Len(t, mq.queue, 1)
-	assert.Equal(t, "user1", mq.queue[0].UserId)
+	assert.Equal(t, "user1", mq.queue["user1"].UserId)
+}
+
+func TestAddUserToQueue_UserAlreadyInQueue(t *testing.T) {
+	mq := NewInMemoryMatchmakingQueue()
+
+	mq.AddUserToQueue("user1")
+	mq.AddUserToQueue("user1")
+
+	mq.mu.Lock()
+	defer mq.mu.Unlock()
+
+	assert.Len(t, mq.queue, 1)
+	assert.Equal(t, "user1", mq.queue["user1"].UserId)
 }
 
 func TestRemoveUserFromQueue(t *testing.T) {
@@ -31,7 +44,8 @@ func TestRemoveUserFromQueue(t *testing.T) {
 	defer mq.mu.Unlock()
 
 	assert.Len(t, mq.queue, 1)
-	assert.Equal(t, "user2", mq.queue[0].UserId)
+	_, exists := mq.queue["user2"]
+	assert.True(t, exists)
 }
 
 func TestFindMatches(t *testing.T) {
@@ -52,7 +66,8 @@ func TestFindMatches(t *testing.T) {
 	defer mq.mu.Unlock()
 
 	assert.Len(t, mq.queue, 1)
-	assert.Equal(t, "user3", mq.queue[0].UserId)
+	_, exists := mq.queue["user3"]
+	assert.True(t, exists)
 }
 
 func TestFindMatches_notEnoughUsers(t *testing.T) {
@@ -68,7 +83,8 @@ func TestFindMatches_notEnoughUsers(t *testing.T) {
 	defer mq.mu.Unlock()
 
 	assert.Len(t, mq.queue, 1)
-	assert.Equal(t, "user1", mq.queue[0].UserId)
+	_, exists := mq.queue["user1"]
+	assert.True(t, exists)
 }
 
 func TestFindMatches_multipleMatches(t *testing.T) {
