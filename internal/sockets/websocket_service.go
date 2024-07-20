@@ -48,6 +48,7 @@ func (service *WebsocketServiceImpl) UnregisterClient(userId string) {
 	defer service.mutex.Unlock()
 
 	delete(service.clients, userId)
+	service.mmService.RemoveUser(userId)
 }
 
 func (service *WebsocketServiceImpl) sendMessage(userId string, message *WebsocketMessage) {

@@ -84,6 +84,9 @@ func TestUnregisterClient(t *testing.T) {
 		userId:   "user1",
 		messages: make(chan *WebsocketMessage, 8),
 	}
+
+	mockMMService.On("RemoveUser", "user1").Return()
+
 	service.RegisterClient(client)
 	service.UnregisterClient("user1")
 
@@ -92,6 +95,7 @@ func TestUnregisterClient(t *testing.T) {
 	service.mutex.Unlock()
 
 	assert.False(t, ok)
+	mockMMService.AssertCalled(t, "RemoveUser", "user1")
 }
 
 func TestSendMessage(t *testing.T) {
