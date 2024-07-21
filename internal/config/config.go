@@ -16,6 +16,7 @@ type Config struct {
 func ReadConfig() *Config {
 	config := Config{}
 	viper.SetConfigFile(".env")
+	viper.AutomaticEnv()
 
 	err := viper.ReadInConfig()
 	if err != nil {
