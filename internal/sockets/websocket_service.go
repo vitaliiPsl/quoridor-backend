@@ -97,6 +97,8 @@ func (service *WebsocketServiceImpl) HandleMessage(userId string, message *Webso
 		service.handleMove(userId, message)
 	case EventTypePlaceWall:
 		service.handlePlaceWall(userId, message)
+	case EventTypeResign:
+		service.handleResign(userId, message)
 	default:
 		log.Printf("Unknown message type: %v", message.Type)
 		service.sendErrorMessage(userId, errors.ErrBadRequest)
@@ -150,6 +152,25 @@ func (service *WebsocketServiceImpl) handlePlaceWall(userId string, message *Web
 	}
 
 	game, err := service.gameService.PlaceWall(payload.GameId, userId, &payload.Wall)
+	if err != nil {
+		service.sendErrorMessage(userId, err)
+		return
+	}
+
+	service.broadcastGameState(game)
+}
+
+func (service *WebsocketServiceImpl) handleResign(userId string, message *WebsocketMessage) {
+	log.Printf("Handling resign: userId=%v", userId)
+
+	payload := ResignPayload{}
+	if err := json.Unmarshal(message.Payload, &payload); err != nil {
+		log.Printf("Failed to unmarshal resign request: userId=%v, err=%v", userId, err)
+		service.sendErrorMessage(userId, errors.ErrBadRequest)
+		return
+	}
+
+	game, err := service.gameService.Resign(payload.GameId, userId)
 	if err != nil {
 		service.sendErrorMessage(userId, err)
 		return

@@ -6,9 +6,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"quoridor/internal/errors"
 	"quoridor/internal/events"
 	"quoridor/internal/game"
-	"quoridor/internal/errors"
 )
 
 type MockMatchmakingService struct {
@@ -53,6 +53,11 @@ func (m *MockGameService) MakeMove(gameId, userId string, newPos *game.Position)
 
 func (m *MockGameService) PlaceWall(gameId, userId string, wall *game.Wall) (*game.Game, error) {
 	args := m.Called(gameId, userId, wall)
+	return args.Get(0).(*game.Game), args.Error(1)
+}
+
+func (m *MockGameService) Resign(gameId, userId string) (*game.Game, error) {
+	args := m.Called(gameId, userId)
 	return args.Get(0).(*game.Game), args.Error(1)
 }
 
