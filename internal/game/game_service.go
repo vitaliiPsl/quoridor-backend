@@ -14,6 +14,7 @@ type GameService interface {
 	CreateGame(user1Id, user2Id string) (*Game, error)
 	MakeMove(gameId, userId string, newPos *Position) (*Game, error)
 	PlaceWall(gameId, userId string, wall *Wall) (*Game, error)
+	Resign(gameId, userId string) (*Game, error)
 }
 
 type GameServiceImpl struct {
@@ -138,9 +139,9 @@ func (service *GameServiceImpl) MakeMove(gameId, userId string, newPos *Position
 
 	if service.engine.CheckWin(state, player) {
 		state.GameStatus = GameStatusCompleted
+		state.EndReason = EndReasonWin
 		state.Winner = userId
-		completedAt := time.Now()
-		state.CompletedAt = &completedAt
+		state.CompletedAt = time.Now()
 		log.Printf("User with id=%s has won the game with id=%s", userId, gameId)
 	} else {
 		state.Turn = service.getNextTurn(state)
@@ -212,6 +213,47 @@ func (service *GameServiceImpl) PlaceWall(gameId, userId string, wall *Wall) (*G
 
 	log.Printf("User with id=%s placed a wall=(%v %+v, %+v) in game with id=%s", userId, wall.Direction, *wall.Pos1, *wall.Pos2, gameId)
 	return state, nil
+}
+
+func (service *GameServiceImpl) Resign(gameId, userId string) (*Game, error) {
+	log.Printf("Resigning from game: gameId=%v, userId=%v", gameId, userId)
+
+	state, err := service.repository.GetGameById(gameId)
+	if err != nil {
+		return nil, errors.ErrInternalError
+	}
+
+	if state == nil {
+		log.Printf("Game with id=%s not found", gameId)
+		return nil, errors.ErrGameNotFound
+	}
+
+	if state.GameStatus != GameStatusInProgress {
+		log.Printf("Game with id=%s is not in progress", gameId)
+		return nil, errors.ErrGameNotInProgress
+	}
+
+	state.GameStatus = GameStatusCompleted
+	state.EndReason = EndReasonResign
+	opponent := service.getOpponent(state, userId)
+	state.Winner = opponent.UserId
+	state.CompletedAt = time.Now()
+
+	err = service.repository.SaveGame(state)
+	if err != nil {
+		log.Printf("Error while saving the game state. gameId=%v, err=%v", gameId, err)
+		return nil, errors.ErrInternalError
+	}
+
+	log.Printf("User with id=%s resigned from game with id=%s. Winner is user with id=%s", userId, gameId, opponent.UserId)
+	return state, nil
+}
+
+func (service *GameServiceImpl) getOpponent(state *Game, playerId string) *Player {
+	if state.Player1.UserId == playerId {
+		return state.Player2
+	}
+	return state.Player1
 }
 
 func (service *GameServiceImpl) getPlayer(state *Game, playerId string) *Player {

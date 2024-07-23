@@ -549,3 +549,88 @@ func TestPlaceWall_givenNoWallsLeft_shouldReturnError(t *testing.T) {
 	repo.AssertCalled(t, "GetGameById", "test-game-id")
 	repo.AssertNotCalled(t, "SaveGame", mock.Anything)
 }
+
+func TestResign(t *testing.T) {
+	repo := new(MockGameRepository)
+	engine := NewGameEngine()
+	service := NewGameService(engine, repo)
+
+	state := &Game{
+		GameId:     "test-game-id",
+		GameStatus: GameStatusInProgress,
+		Player1: &Player{
+			UserId:   "player1",
+			Position: &Position{X: 4, Y: 4},
+			Goal:     8,
+			Walls:    10,
+		},
+		Player2: &Player{
+			UserId:   "player2",
+			Position: &Position{X: 4, Y: 8},
+			Goal:     0,
+			Walls:    10,
+		},
+		Turn:  "player1",
+		Walls: []*Wall{},
+	}
+
+	repo.On("GetGameById", "test-game-id").Return(state, nil)
+	repo.On("SaveGame", mock.Anything).Return(nil)
+
+	updatedState, err := service.Resign("test-game-id", "player1")
+	assert.NoError(t, err)
+	assert.Equal(t, GameStatusCompleted, updatedState.GameStatus)
+	assert.Equal(t, "player2", updatedState.Winner)
+	assert.Equal(t, EndReasonResign, updatedState.EndReason)
+	assert.NotNil(t, updatedState.CompletedAt)
+
+	repo.AssertCalled(t, "GetGameById", "test-game-id")
+	repo.AssertCalled(t, "SaveGame", mock.Anything)
+}
+
+func TestResign_givenGameNotFound_shouldReturnError(t *testing.T) {
+	repo := new(MockGameRepository)
+	engine := NewGameEngine()
+	service := NewGameService(engine, repo)
+
+	repo.On("GetGameById", "test-game-id").Return((*Game)(nil), errors.ErrInternalError)
+
+	_, err := service.Resign("test-game-id", "player1")
+	assert.ErrorIs(t, err, errors.ErrInternalError)
+
+	repo.AssertCalled(t, "GetGameById", "test-game-id")
+	repo.AssertNotCalled(t, "SaveGame", mock.Anything)
+}
+
+func TestResign_givenGameNotInProgress_shouldReturnError(t *testing.T) {
+	repo := new(MockGameRepository)
+	engine := NewGameEngine()
+	service := NewGameService(engine, repo)
+
+	state := &Game{
+		GameId:     "test-game-id",
+		GameStatus: GameStatusCompleted,
+		Player1: &Player{
+			UserId:   "player1",
+			Position: &Position{X: 4, Y: 4},
+			Goal:     8,
+			Walls:    10,
+		},
+		Player2: &Player{
+			UserId:   "player2",
+			Position: &Position{X: 4, Y: 8},
+			Goal:     0,
+			Walls:    10,
+		},
+		Turn:  "player1",
+		Walls: []*Wall{},
+	}
+
+	repo.On("GetGameById", "test-game-id").Return(state, nil)
+
+	_, err := service.Resign("test-game-id", "player1")
+	assert.ErrorIs(t, err, errors.ErrGameNotInProgress)
+
+	repo.AssertCalled(t, "GetGameById", "test-game-id")
+	repo.AssertNotCalled(t, "SaveGame", mock.Anything)
+}

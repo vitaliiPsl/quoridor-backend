@@ -25,18 +25,26 @@ const (
 	MoveTypePlaceWall MoveType = "place_wall"
 )
 
+type GameEndReason string
+
+const (
+	EndReasonWin    GameEndReason = "win"
+	EndReasonResign GameEndReason = "resign"
+)
+
 type Game struct {
-	GameId      string     `bson:"_id" json:"game_id"`
-	GameStatus  GameStatus `bson:"status" json:"status"`
-	Winner      string     `bson:"winner,omitempty" json:"winner,omitempty"` // id of the winner
-	Turn        string     `bson:"turn" json:"turn"`                         // id of the player
-	Player1     *Player    `bson:"player_1" json:"player_1"`
-	Player2     *Player    `bson:"player_2" json:"player_2"`
-	Walls       []*Wall    `bson:"walls" json:"walls"`
-	Moves       []*Move    `bson:"moves" json:"moves"`
-	CreatedAt   time.Time  `bson:"created_at" json:"created_at"`
-	UpdatedAt   time.Time  `bson:"updated_at" json:"updated_at"`
-	CompletedAt *time.Time `bson:"completed_at,omitempty" json:"completed_at,omitempty"`
+	GameId      string        `bson:"_id" json:"game_id"`
+	GameStatus  GameStatus    `bson:"status" json:"status"`
+	EndReason   GameEndReason `bson:"end_reason,omitempty" json:"end_reason,omitempty"`
+	Winner      string        `bson:"winner,omitempty" json:"winner,omitempty"` // id of the winner
+	Turn        string        `bson:"turn" json:"turn"`                         // id of the player
+	Player1     *Player       `bson:"player_1" json:"player_1"`
+	Player2     *Player       `bson:"player_2" json:"player_2"`
+	Walls       []*Wall       `bson:"walls" json:"walls"`
+	Moves       []*Move       `bson:"moves" json:"moves"`
+	CreatedAt   time.Time     `bson:"created_at" json:"created_at"`
+	UpdatedAt   time.Time     `bson:"updated_at" json:"updated_at"`
+	CompletedAt time.Time     `bson:"completed_at,omitempty" json:"completed_at,omitempty"`
 }
 
 type Player struct {
