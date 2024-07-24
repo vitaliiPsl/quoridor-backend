@@ -29,6 +29,11 @@ func (m *MockGameRepository) GetGamesByStatus(status GameStatus) ([]*Game, error
 	return args.Get(0).([]*Game), args.Error(1)
 }
 
+func (m *MockGameRepository) GetGamesByUserIdAndStatus(userId string, status GameStatus) ([]*Game, error) {
+	args := m.Called(userId, status)
+	return args.Get(0).([]*Game), args.Error(1)
+}
+
 func TestGetGameById(t *testing.T) {
 	repo := new(MockGameRepository)
 	engine := NewGameEngine()
@@ -88,6 +93,61 @@ func TestCreateGame(t *testing.T) {
 	assert.NotEmpty(t, state.UpdatedAt)
 
 	repo.AssertCalled(t, "SaveGame", mock.Anything)
+}
+
+func TestGetActiveGameByUserId(t *testing.T) {
+	repo := new(MockGameRepository)
+	engine := NewGameEngine()
+	service := NewGameService(engine, repo)
+
+	state := &Game{
+		GameId:     "active-game-id",
+		GameStatus: GameStatusInProgress,
+		Player1: &Player{
+			UserId:   "player1",
+			Position: &Position{X: 4, Y: 0},
+			Goal:     8,
+			Walls:    10,
+		},
+		Walls: []*Wall{},
+	}
+
+	repo.On("GetGamesByUserIdAndStatus", "player1", GameStatusInProgress).Return([]*Game{state}, nil)
+
+	activeGame, err := service.GetActiveGameByUserId("player1")
+
+	assert.NoError(t, err)
+	assert.NotNil(t, activeGame)
+	assert.Equal(t, "active-game-id", activeGame.GameId)
+	repo.AssertCalled(t, "GetGamesByUserIdAndStatus", "player1", GameStatusInProgress)
+}
+
+func TestGetActiveGameByUserId_NoActiveGame(t *testing.T) {
+	repo := new(MockGameRepository)
+	engine := NewGameEngine()
+	service := NewGameService(engine, repo)
+
+	repo.On("GetGamesByUserIdAndStatus", "player1", GameStatusInProgress).Return([]*Game{}, nil)
+
+	activeGame, err := service.GetActiveGameByUserId("player1")
+
+	assert.NoError(t, err)
+	assert.Nil(t, activeGame)
+	repo.AssertCalled(t, "GetGamesByUserIdAndStatus", "player1", GameStatusInProgress)
+}
+
+func TestGetActiveGameByUserId_ErrorFetchingGames(t *testing.T) {
+	repo := new(MockGameRepository)
+	engine := NewGameEngine()
+	service := NewGameService(engine, repo)
+
+	repo.On("GetGamesByUserIdAndStatus", "player1", GameStatusInProgress).Return(nil, errors.ErrInternalError)
+
+	activeGame, err := service.GetActiveGameByUserId("player1")
+
+	assert.ErrorIs(t, err, errors.ErrInternalError)
+	assert.Nil(t, activeGame)
+	repo.AssertCalled(t, "GetGamesByUserIdAndStatus", "player1", GameStatusInProgress)
 }
 
 func TestMakeMove(t *testing.T) {

@@ -41,9 +41,9 @@ func (m *MockGameService) GetGameById(gameId string) (*game.Game, error) {
 	return args.Get(0).(*game.Game), args.Error(1)
 }
 
-func (m *MockGameService) GetPendingGames() ([]*game.Game, error) {
-	args := m.Called()
-	return args.Get(0).([]*game.Game), args.Error(1)
+func (m *MockGameService) GetActiveGameByUserId(userId string) (*game.Game, error) {
+	args := m.Called(userId)
+	return args.Get(0).(*game.Game), args.Error(1)
 }
 
 func (m *MockGameService) MakeMove(gameId, userId string, newPos *game.Position) (*game.Game, error) {
@@ -126,18 +126,6 @@ func TestSendMessage(t *testing.T) {
 	assert.Equal(t, message, receivedMessage)
 }
 
-func TestHandleMessage_StartGame(t *testing.T) {
-	mockMMService := new(MockMatchmakingService)
-	mockGameService := new(MockGameService)
-	service := NewWebsocketService(mockMMService, mockGameService)
-
-	mockMMService.On("AddUser", "user1").Return()
-
-	message := &WebsocketMessage{Type: EventTypeStartGame}
-	service.HandleMessage("user1", message)
-
-	mockMMService.AssertCalled(t, "AddUser", "user1")
-}
 
 func TestHandleMessage_UnknownType(t *testing.T) {
 	mockMMService := new(MockMatchmakingService)
@@ -161,6 +149,100 @@ func TestHandleMessage_UnknownType(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, errors.ErrBadRequest.Error(), errorPayload.ErrorType)
 }
+
+func TestHandleStartGame(t *testing.T) {
+	mockMMService := new(MockMatchmakingService)
+	mockGameService := new(MockGameService)
+	service := NewWebsocketService(mockMMService, mockGameService)
+
+	client := &Client{
+		userId:   "user1",
+		messages: make(chan *WebsocketMessage, 1),
+	}
+	service.RegisterClient(client)
+
+	activeGame := &game.Game{
+		GameId: "game1",
+		Player1: &game.Player{
+			UserId: "user1",
+		},
+		Player2: &game.Player{
+			UserId: "user2",
+		},
+		GameStatus: game.GameStatusInProgress,
+	}
+	mockGameService.On("GetActiveGameByUserId", "user1").Return(activeGame, nil)
+
+	message := &WebsocketMessage{Type: EventTypeStartGame}
+	service.handStartGame("user1", message)
+
+	receivedMessage := <-client.messages
+	assert.Equal(t, EventTypeGameState, receivedMessage.Type)
+
+	var receivedGame game.Game
+	err := json.Unmarshal(receivedMessage.Payload, &receivedGame)
+	assert.NoError(t, err)
+	assert.Equal(t, activeGame.GameId, receivedGame.GameId)
+
+	mockGameService.AssertCalled(t, "GetActiveGameByUserId", "user1")
+}
+
+func TestHandleStartGame_NoActiveGame(t *testing.T) {
+	mockMMService := new(MockMatchmakingService)
+	mockGameService := new(MockGameService)
+	service := NewWebsocketService(mockMMService, mockGameService)
+
+	client := &Client{
+		userId:   "user1",
+		messages: make(chan *WebsocketMessage, 1),
+	}
+	service.RegisterClient(client)
+
+	mockGameService.On("GetActiveGameByUserId", "user1").Return((*game.Game)(nil), nil)
+	mockMMService.On("AddUser", "user1").Return()
+
+	message := &WebsocketMessage{Type: EventTypeStartGame}
+	service.handStartGame("user1", message)
+
+	receivedMessage := <-client.messages
+	assert.Equal(t, EventTypeGameState, receivedMessage.Type)
+
+	var receivedGame *game.Game
+	err := json.Unmarshal(receivedMessage.Payload, &receivedGame)
+	assert.NoError(t, err)
+	assert.Nil(t, receivedGame)
+
+	mockGameService.AssertCalled(t, "GetActiveGameByUserId", "user1")
+	mockMMService.AssertCalled(t, "AddUser", "user1")
+}
+
+func TestHandleStartGame_ErrorFetchingGame(t *testing.T) {
+	mockMMService := new(MockMatchmakingService)
+	mockGameService := new(MockGameService)
+	service := NewWebsocketService(mockMMService, mockGameService)
+
+	client := &Client{
+		userId:   "user1",
+		messages: make(chan *WebsocketMessage, 1),
+	}
+	service.RegisterClient(client)
+
+	mockGameService.On("GetActiveGameByUserId", "user1").Return((*game.Game)(nil), errors.ErrInternalError)
+
+	message := &WebsocketMessage{Type: EventTypeStartGame}
+	service.handStartGame("user1", message)
+
+	receivedMessage := <-client.messages
+	assert.Equal(t, EventTypeError, receivedMessage.Type)
+
+	var errorPayload ErrorMessagePayload
+	err := json.Unmarshal(receivedMessage.Payload, &errorPayload)
+	assert.NoError(t, err)
+	assert.Equal(t, errors.ErrInternalError.Error(), errorPayload.ErrorType)
+
+	mockGameService.AssertCalled(t, "GetActiveGameByUserId", "user1")
+}
+
 
 func TestHandleMatchFound(t *testing.T) {
 	mockMMService := new(MockMatchmakingService)

@@ -14,6 +14,7 @@ type GameRepository interface {
 	SaveGame(state *Game) error
 	GetGameById(gameID string) (*Game, error)
 	GetGamesByStatus(status GameStatus) ([]*Game, error)
+	GetGamesByUserIdAndStatus(userId string, status GameStatus) ([]*Game, error)
 }
 
 type MongoGameRepository struct {
@@ -73,6 +74,46 @@ func (r *MongoGameRepository) GetGamesByStatus(status GameStatus) ([]*Game, erro
 	cursor, err := r.collection.Find(ctx, bson.M{"status": status})
 	if err != nil {
 		log.Printf("Error loading games by status: %v", err)
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	games := []*Game{}
+	for cursor.Next(ctx) {
+		var game Game
+		err := cursor.Decode(&game)
+		if err != nil {
+			log.Printf("Error decoding game: %v", err)
+			continue
+		}
+		games = append(games, &game)
+	}
+
+	if err := cursor.Err(); err != nil {
+		log.Printf("Cursor error: %v", err)
+		return nil, err
+	}
+
+	return games, nil
+}
+
+func (r *MongoGameRepository) GetGamesByUserIdAndStatus(userId string, status GameStatus) ([]*Game, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	filter := bson.M{
+		"$and": []bson.M{
+			{"$or": []bson.M{
+				{"player_1.user_id": userId},
+				{"player_2.user_id": userId},
+			}},
+			{"status": status},
+		},
+	}
+
+	cursor, err := r.collection.Find(ctx, filter)
+	if err != nil {
+		log.Printf("Error loading games for user: %v, status: %v: %v", userId, status, err)
 		return nil, err
 	}
 	defer cursor.Close(ctx)

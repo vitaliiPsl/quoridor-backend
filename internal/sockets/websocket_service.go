@@ -62,9 +62,7 @@ func (service *WebsocketServiceImpl) sendMessage(userId string, message *Websock
 func (service *WebsocketServiceImpl) sendErrorMessage(userId string, err error) {
 	log.Printf("Error: userId=%v, err=%v", userId, err)
 
-	errorPayload := ErrorMessagePayload{
-		ErrorType: err.Error(),
-	}
+	errorPayload := ErrorMessagePayload{ErrorType: err.Error()}
 	payload, err := json.Marshal(errorPayload)
 	if err != nil {
 		log.Printf("Failed to marshal error payload: err=%v", err)
@@ -125,18 +123,28 @@ func (service *WebsocketServiceImpl) HandleMatchFound(event *events.Event) {
 }
 
 func (service *WebsocketServiceImpl) handStartGame(userId string, _ *WebsocketMessage) {
-	activeGame, err := service.gameService.GetActiveGameForUser(userId)
+	log.Printf("Handling start game: userId=%v", userId)
+
+	activeGame, err := service.gameService.GetActiveGameByUserId(userId)
 	if err != nil {
-		service.sendErrorMessage(userId, err)
+		service.sendErrorMessage(userId, errors.ErrInternalError)
 		return
 	}
 
-	if activeGame != nil {
-		service.broadcastGameState(activeGame)
+	if activeGame == nil {
+		log.Printf("Adding user to matchmaking queue: userId=%v.", userId)
+		service.mmService.AddUser(userId)
 		return
 	}
 
-	service.mmService.AddUser(userId)
+	payload, err := json.Marshal(activeGame)
+	if err != nil {
+		log.Printf("Failed to marshal game state: err=%v", err)
+		return
+	}
+
+	message := WebsocketMessage{Type: EventTypeGameState, Payload: payload}
+	service.sendMessage(userId, &message)
 }
 
 func (service *WebsocketServiceImpl) handleMove(userId string, message *WebsocketMessage) {
