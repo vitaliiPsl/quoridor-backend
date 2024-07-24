@@ -15,6 +15,7 @@ type GameService interface {
 	MakeMove(gameId, userId string, newPos *Position) (*Game, error)
 	PlaceWall(gameId, userId string, wall *Wall) (*Game, error)
 	Resign(gameId, userId string) (*Game, error)
+	Reconnect(gameId, userId string) (*Game, error)
 }
 
 type GameServiceImpl struct {
@@ -246,6 +247,33 @@ func (service *GameServiceImpl) Resign(gameId, userId string) (*Game, error) {
 	}
 
 	log.Printf("User with id=%s resigned from game with id=%s. Winner is user with id=%s", userId, gameId, opponent.UserId)
+	return state, nil
+}
+
+func (service *GameServiceImpl) Reconnect(gameId, userId string) (*Game, error) {
+	log.Printf("Reconnecting user to game: gameId=%v, userId=%v", gameId, userId)
+
+	state, err := service.repository.GetGameById(gameId)
+	if err != nil {
+		return nil, errors.ErrInternalError
+	}
+
+	if state == nil {
+		log.Printf("Game with id=%s not found", gameId)
+		return nil, errors.ErrGameNotFound
+	}
+
+	if state.GameStatus != GameStatusInProgress {
+		log.Printf("Game with id=%s is not in progress", gameId)
+		return nil, errors.ErrGameNotInProgress
+	}
+
+	if state.Player1.UserId != userId && state.Player2.UserId != userId {
+		log.Printf("User with id=%s is not part of game with id=%s", userId, gameId)
+		return nil, errors.ErrNotAPlayer
+	}
+
+	log.Printf("User with id=%s successfully reconnected to game with id=%s", userId, gameId)
 	return state, nil
 }
 

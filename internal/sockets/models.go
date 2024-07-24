@@ -13,6 +13,7 @@ const (
 	EventTypeMakeMove  EventType = "make_move"
 	EventTypePlaceWall EventType = "place_wall"
 	EventTypeResign    EventType = "resign"
+	EventTypeReconnect EventType = "reconnect"
 
 	// OUT
 	EventTypeGameState EventType = "game_state"
@@ -35,6 +36,10 @@ type PlaceWallPayload struct {
 }
 
 type ResignPayload struct {
+	GameId string `json:"game_id"`
+}
+
+type ReconnectPayload struct {
 	GameId string `json:"game_id"`
 }
 

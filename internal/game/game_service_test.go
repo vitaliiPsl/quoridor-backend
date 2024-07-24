@@ -634,3 +634,112 @@ func TestResign_givenGameNotInProgress_shouldReturnError(t *testing.T) {
 	repo.AssertCalled(t, "GetGameById", "test-game-id")
 	repo.AssertNotCalled(t, "SaveGame", mock.Anything)
 }
+
+func TestReconnect(t *testing.T) {
+	repo := new(MockGameRepository)
+	engine := NewGameEngine()
+	service := NewGameService(engine, repo)
+
+	state := &Game{
+		GameId:     "test-game-id",
+		GameStatus: GameStatusInProgress,
+		Player1: &Player{
+			UserId:   "player1",
+			Position: &Position{X: 4, Y: 4},
+			Goal:     8,
+			Walls:    10,
+		},
+		Player2: &Player{
+			UserId:   "player2",
+			Position: &Position{X: 4, Y: 8},
+			Goal:     0,
+			Walls:    10,
+		},
+		Turn:  "player1",
+		Walls: []*Wall{},
+	}
+
+	repo.On("GetGameById", "test-game-id").Return(state, nil)
+
+	retrievedState, err := service.Reconnect("test-game-id", "player1")
+	assert.NoError(t, err)
+	assert.Equal(t, state.GameId, retrievedState.GameId)
+	repo.AssertCalled(t, "GetGameById", "test-game-id")
+}
+
+func TestReconnect_givenNonExistentGameId_shouldReturnError(t *testing.T) {
+	repo := new(MockGameRepository)
+	engine := NewGameEngine()
+	service := NewGameService(engine, repo)
+
+	repo.On("GetGameById", "non-existent-game-id").Return((*Game)(nil), errors.ErrInternalError)
+
+	retrievedState, err := service.Reconnect("non-existent-game-id", "player1")
+	assert.ErrorIs(t, err, errors.ErrInternalError)
+	assert.Nil(t, retrievedState)
+	repo.AssertCalled(t, "GetGameById", "non-existent-game-id")
+}
+
+func TestReconnect_givenGameNotInProgress_shouldReturnError(t *testing.T) {
+	repo := new(MockGameRepository)
+	engine := NewGameEngine()
+	service := NewGameService(engine, repo)
+
+	state := &Game{
+		GameId:     "test-game-id",
+		GameStatus: GameStatusCompleted,
+		Player1: &Player{
+			UserId:   "player1",
+			Position: &Position{X: 4, Y: 4},
+			Goal:     8,
+			Walls:    10,
+		},
+		Player2: &Player{
+			UserId:   "player2",
+			Position: &Position{X: 4, Y: 8},
+			Goal:     0,
+			Walls:    10,
+		},
+		Turn:  "player1",
+		Walls: []*Wall{},
+	}
+
+	repo.On("GetGameById", "test-game-id").Return(state, nil)
+
+	retrievedState, err := service.Reconnect("test-game-id", "player1")
+	assert.ErrorIs(t, err, errors.ErrGameNotInProgress)
+	assert.Nil(t, retrievedState)
+	repo.AssertCalled(t, "GetGameById", "test-game-id")
+}
+
+func TestReconnect_givenUserNotInGame_shouldReturnError(t *testing.T) {
+	repo := new(MockGameRepository)
+	engine := NewGameEngine()
+	service := NewGameService(engine, repo)
+
+	state := &Game{
+		GameId:     "test-game-id",
+		GameStatus: GameStatusInProgress,
+		Player1: &Player{
+			UserId:   "player1",
+			Position: &Position{X: 4, Y: 4},
+			Goal:     8,
+			Walls:    10,
+		},
+		Player2: &Player{
+			UserId:   "player2",
+			Position: &Position{X: 4, Y: 8},
+			Goal:     0,
+			Walls:    10,
+		},
+		Turn:  "player1",
+		Walls: []*Wall{},
+	}
+
+	repo.On("GetGameById", "test-game-id").Return(state, nil)
+
+	retrievedState, err := service.Reconnect("test-game-id", "invalid-user")
+	assert.ErrorIs(t, err, errors.ErrNotAPlayer)
+	assert.Nil(t, retrievedState)
+	repo.AssertCalled(t, "GetGameById", "test-game-id")
+}

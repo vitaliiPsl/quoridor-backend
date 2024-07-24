@@ -10,4 +10,5 @@ var (
 	ErrNotPlayersTurn       = errors.New("not_players_turn")
 	ErrInvalidMove          = errors.New("invalid_move")
 	ErrInvalidWallPlacement = errors.New("invalid_wall_placement")
+	ErrNotAPlayer           = errors.New("not_a_player")
 )

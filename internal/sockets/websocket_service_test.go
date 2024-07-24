@@ -61,6 +61,11 @@ func (m *MockGameService) Resign(gameId, userId string) (*game.Game, error) {
 	return args.Get(0).(*game.Game), args.Error(1)
 }
 
+func (m *MockGameService) Reconnect(gameId, userId string) (*game.Game, error) {
+	args := m.Called(gameId, userId)
+	return args.Get(0).(*game.Game), args.Error(1)
+}
+
 func TestRegisterClient(t *testing.T) {
 	mockMMService := new(MockMatchmakingService)
 	mockGameService := new(MockGameService)
@@ -351,4 +356,40 @@ func TestHandlePlaceWall_PlaceWallError(t *testing.T) {
 	err := json.Unmarshal(errorMessage.Payload, &errorPayload)
 	assert.NoError(t, err)
 	assert.Equal(t, errors.ErrInvalidWallPlacement.Error(), errorPayload.ErrorType)
+}
+
+func TestHandleReconnect(t *testing.T) {
+	mockMMService := new(MockMatchmakingService)
+	mockGameService := new(MockGameService)
+	service := NewWebsocketService(mockMMService, mockGameService)
+
+	client := &Client{
+		userId:   "user1",
+		messages: make(chan *WebsocketMessage, 1),
+	}
+	service.RegisterClient(client)
+
+	game := &game.Game{
+		GameId: "game1",
+		Player1: &game.Player{
+			UserId: "user1",
+		},
+		Player2: &game.Player{
+			UserId: "user2",
+		},
+		GameStatus: game.GameStatusInProgress,
+	}
+	mockGameService.On("Reconnect", "game1", "user1").Return(game, nil)
+
+	payload := ReconnectPayload{
+		GameId: "game1",
+	}
+	payloadBytes, _ := json.Marshal(payload)
+	message := &WebsocketMessage{Type: EventTypeReconnect, Payload: payloadBytes}
+	service.HandleMessage("user1", message)
+
+	receivedMessage := <-client.messages
+	assert.Equal(t, EventTypeGameState, receivedMessage.Type)
+
+	mockGameService.AssertCalled(t, "Reconnect", "game1", "user1")
 }
