@@ -92,7 +92,7 @@ func (service *WebsocketServiceImpl) HandleMessage(userId string, message *Webso
 
 	switch message.Type {
 	case EventTypeStartGame:
-		service.mmService.AddUser(userId)
+		service.handStartGame(userId, message)
 	case EventTypeMakeMove:
 		service.handleMove(userId, message)
 	case EventTypePlaceWall:
@@ -122,6 +122,21 @@ func (service *WebsocketServiceImpl) HandleMatchFound(event *events.Event) {
 	}
 
 	service.broadcastGameState(game)
+}
+
+func (service *WebsocketServiceImpl) handStartGame(userId string, _ *WebsocketMessage) {
+	activeGame, err := service.gameService.GetActiveGameForUser(userId)
+	if err != nil {
+		service.sendErrorMessage(userId, err)
+		return
+	}
+
+	if activeGame != nil {
+		service.broadcastGameState(activeGame)
+		return
+	}
+
+	service.mmService.AddUser(userId)
 }
 
 func (service *WebsocketServiceImpl) handleMove(userId string, message *WebsocketMessage) {

@@ -68,41 +68,6 @@ func TestGetGameById_givenNonExistentGameId_shouldReturnError(t *testing.T) {
 	repo.AssertCalled(t, "GetGameById", "non-existent-game-id")
 }
 
-func TestGetPendingGames(t *testing.T) {
-	repo := new(MockGameRepository)
-	engine := NewGameEngine()
-	service := NewGameService(engine, repo)
-
-	game1 := &Game{
-		GameId:     "game1",
-		GameStatus: GameStatusPending,
-	}
-	game2 := &Game{
-		GameId:     "game2",
-		GameStatus: GameStatusPending,
-	}
-
-	repo.On("GetGamesByStatus", GameStatusPending).Return([]*Game{game1, game2}, nil)
-
-	pendingGames, err := service.GetPendingGames()
-	assert.NoError(t, err)
-	assert.Len(t, pendingGames, 2)
-	repo.AssertCalled(t, "GetGamesByStatus", GameStatusPending)
-}
-
-func TestGetPendingGames_givenNoPendingGames_shouldReturnEmptyList(t *testing.T) {
-	repo := new(MockGameRepository)
-	engine := NewGameEngine()
-	service := NewGameService(engine, repo)
-
-	repo.On("GetGamesByStatus", GameStatusPending).Return([]*Game{}, nil)
-
-	pendingGames, err := service.GetPendingGames()
-	assert.NoError(t, err)
-	assert.Empty(t, pendingGames)
-	repo.AssertCalled(t, "GetGamesByStatus", GameStatusPending)
-}
-
 func TestCreateGame(t *testing.T) {
 	repo := new(MockGameRepository)
 	engine := NewGameEngine()

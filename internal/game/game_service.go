@@ -10,7 +10,6 @@ import (
 
 type GameService interface {
 	GetGameById(gameId string) (*Game, error)
-	GetPendingGames() ([]*Game, error)
 	CreateGame(user1Id, user2Id string) (*Game, error)
 	MakeMove(gameId, userId string, newPos *Position) (*Game, error)
 	PlaceWall(gameId, userId string, wall *Wall) (*Game, error)
@@ -45,19 +44,6 @@ func (service *GameServiceImpl) GetGameById(gameId string) (*Game, error) {
 	}
 
 	return state, nil
-}
-
-func (service *GameServiceImpl) GetPendingGames() ([]*Game, error) {
-	log.Println("Fetching pending games")
-
-	games, err := service.repository.GetGamesByStatus(GameStatusPending)
-	if err != nil {
-		log.Printf("Error while fetching pending games. err=%v", err)
-		return nil, errors.ErrInternalError
-	}
-
-	log.Printf("Fetched %d pending games", len(games))
-	return games, nil
 }
 
 func (service *GameServiceImpl) CreateGame(user1Id, user2Id string) (*Game, error) {
